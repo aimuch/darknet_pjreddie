@@ -788,21 +788,24 @@ void network_detect(network *net, image im, float thresh, float hier_thresh, flo
 
 void run_detector(int argc, char **argv)
 {
-    char *prefix = find_char_arg(argc, argv, "-prefix", 0);
-    float thresh = find_float_arg(argc, argv, "-thresh", .5);
-    float hier_thresh = find_float_arg(argc, argv, "-hier", .5);
-    int cam_index = find_int_arg(argc, argv, "-c", 0);
-    int frame_skip = find_int_arg(argc, argv, "-s", 0);
-    int avg = find_int_arg(argc, argv, "-avg", 3);
+    char *prefix = find_char_arg(argc, argv, "-prefix", 0);     // 前缀
+    float thresh = find_float_arg(argc, argv, "-thresh", .5);   // 阈值
+    float hier_thresh = find_float_arg(argc, argv, "-hier", .5);// 层次结构阈值，目前还未知用处
+    int cam_index = find_int_arg(argc, argv, "-c", 0);  // 摄像头索引              
+    int frame_skip = find_int_arg(argc, argv, "-s", 0); // 跳过多少帧，作者未实现
+    int avg = find_int_arg(argc, argv, "-avg", 3);      // 作者后面用的全局变量代替了该变量
     if(argc < 4){
         fprintf(stderr, "usage: %s %s [train/test/valid] [cfg] [weights (optional)]\n", argv[0], argv[1]);
         return;
     }
-    char *gpu_list = find_char_arg(argc, argv, "-gpus", 0);
-    char *outfile = find_char_arg(argc, argv, "-out", 0);
-    int *gpus = 0;
+
+    char *gpu_list = find_char_arg(argc, argv, "-gpus", 0); // 获取指定GPU的字符串数组，默认使用0号GPU
+    char *outfile = find_char_arg(argc, argv, "-out", 0);    // 输出文件名
+    
+    /* 分析指定GPU使用情况 */
+    int *gpus = 0;  // GPU数组
     int gpu = 0;
-    int ngpus = 0;
+    int ngpus = 0;  // GPU数量
     if(gpu_list){
         printf("%s\n", gpu_list);
         int len = strlen(gpu_list);
@@ -813,8 +816,8 @@ void run_detector(int argc, char **argv)
         }
         gpus = calloc(ngpus, sizeof(int));
         for(i = 0; i < ngpus; ++i){
-            gpus[i] = atoi(gpu_list);
-            gpu_list = strchr(gpu_list, ',')+1;
+            gpus[i] = atoi(gpu_list);   // 数组名
+            gpu_list = strchr(gpu_list, ',') + 1;
         }
     } else {
         gpu = gpu_index;

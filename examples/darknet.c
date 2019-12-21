@@ -412,8 +412,12 @@ int main(int argc, char **argv)
         return 0;
     }
 
+
+    /* 设置GPU */
     // 从参数参数中查找对应的gpu的index，找到后删除gpu相关的参数
     gpu_index = find_int_arg(argc, argv, "-i", 0);
+
+    // 若发现-nogpu这个参数的时候，将gpu_index设置为-1
     if(find_arg(argc, argv, "-nogpu")) {
         gpu_index = -1;
     }
@@ -426,6 +430,8 @@ int main(int argc, char **argv)
     }
 #endif
 
+
+    /* 解析具体的网络选项参数 */
     if (0 == strcmp(argv[1], "average")){
         average(argc, argv);
     } else if (0 == strcmp(argv[1], "yolo")){
@@ -435,7 +441,7 @@ int main(int argc, char **argv)
     } else if (0 == strcmp(argv[1], "lsd")){
         run_lsd(argc, argv);
     } else if (0 == strcmp(argv[1], "detector")){
-        run_detector(argc, argv);
+        run_detector(argc, argv);   // 训练、测试主函数
     } else if (0 == strcmp(argv[1], "detect")){
         float thresh = find_float_arg(argc, argv, "-thresh", .5);
         char *filename = (argc > 4) ? argv[4]: 0;

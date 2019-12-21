@@ -110,35 +110,70 @@ int *random_index_order(int min, int max)
     return inds;
 }
 
+/*
+** 功能：删除指定位置的选项参数
+** 参数：
+**      - argc: 输入选项参数数量
+**      - argv: 输入选项参数的二维数组/矩阵
+**      - index: 选项位置
+*/
 void del_arg(int argc, char **argv, int index)
 {
     int i;
+    // 将index后续位置的选项参数前移
     for(i = index; i < argc-1; ++i) argv[i] = argv[i+1];
+
+    // 在移动后的最后一个位置设置0来终断字符串
     argv[i] = 0;
 }
 
+/*
+** 功能：在程序参数里检查不带参数的相关选项是否在字符串中
+** 参数：
+**      - argc: 输入选项参数数量
+**      - argv: 输入选项参数的二维数组/矩阵
+**      - arg:  需要查找的选项
+** 返回值：
+**      1:  找到
+**      0:  未找到
+*/
 int find_arg(int argc, char* argv[], char *arg)
 {
     int i;
     for(i = 0; i < argc; ++i) {
         if(!argv[i]) continue;
         if(0==strcmp(argv[i], arg)) {
-            del_arg(argc, argv, i);
+            del_arg(argc, argv, i); // 因为是不带参数的选项，所以只需要删除一次即可
             return 1;
         }
     }
     return 0;
 }
 
+/*
+** 功能：在程序参数里通过选项查找相关参数
+** 参数：
+**      - argc: 输入选项参数数量
+**      - argv: 输入选项参数的二维数组/矩阵
+**      - arg:  需要查找的选项
+**      - def:  默认值
+** 返回值：
+**      找到的参数值，否则用默认值
+*/
 int find_int_arg(int argc, char **argv, char *arg, int def)
 {
     int i;
+    // argv二维向量/数组的第一个元素argv[0]一定是程序的名称，并且包含了程序所在的完整路径，所以确切的说需要我们输入的main函数的参数个数应该是argc-1个
+    // 但该循环里的argc-1是因为最后一项为参数，我们是通过选项来找的参数
+    // 这里用到了++i，因为前置比后置自增效率高
     for(i = 0; i < argc-1; ++i){
         if(!argv[i]) continue;
+
+        // 字符串比较，相等时返回0
         if(0==strcmp(argv[i], arg)){
-            def = atoi(argv[i+1]);
-            del_arg(argc, argv, i);
-            del_arg(argc, argv, i);
+            def = atoi(argv[i+1]);  // 参数字符转整型，因为argv[i]为选项，后面的argv[i+1]才是参数
+            del_arg(argc, argv, i); // 删除选项
+            del_arg(argc, argv, i); // 删除参数
             break;
         }
     }
