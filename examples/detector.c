@@ -799,27 +799,30 @@ void run_detector(int argc, char **argv)
         return;
     }
 
-    char *gpu_list = find_char_arg(argc, argv, "-gpus", 0); // 获取指定GPU的字符串数组，默认使用0号GPU
+    char *gpu_list = find_char_arg(argc, argv, "-gpus", 0); // 获取指定GPU的字符串数组，默认数组为空
     char *outfile = find_char_arg(argc, argv, "-out", 0);    // 输出文件名
     
     /* 分析指定GPU使用情况 */
     int *gpus = 0;  // GPU数组
     int gpu = 0;
     int ngpus = 0;  // GPU数量
-    if(gpu_list){
+    if(gpu_list){ // 当有-gpus选项时
         printf("%s\n", gpu_list);
         int len = strlen(gpu_list);
         ngpus = 1;
         int i;
+
+        // 统计gpu个数
         for(i = 0; i < len; ++i){
             if (gpu_list[i] == ',') ++ngpus;
         }
+
         gpus = calloc(ngpus, sizeof(int));
         for(i = 0; i < ngpus; ++i){
-            gpus[i] = atoi(gpu_list);   // 数组名
-            gpu_list = strchr(gpu_list, ',') + 1;
+            gpus[i] = atoi(gpu_list);   // atoi(const char *str)转译str所指的字节字符串中的整数值。舍弃任何空白符，直至找到首个非空白符，这里输入为"0,1,2"当得到0
+            gpu_list = strchr(gpu_list, ',') + 1; // strchr查找","首次出现的位置
         }
-    } else {
+    } else { // 当没有-gpus选项时
         gpu = gpu_index;
         gpus = &gpu;
         ngpus = 1;
@@ -832,8 +835,8 @@ void run_detector(int argc, char **argv)
     int fps = find_int_arg(argc, argv, "-fps", 0);
     //int class = find_int_arg(argc, argv, "-class", 0);
 
-    char *datacfg = argv[3];
-    char *cfg = argv[4];
+    char *datacfg = argv[3]; // 数据配置文件
+    char *cfg = argv[4]; // 模型配置文件
     char *weights = (argc > 5) ? argv[5] : 0;
     char *filename = (argc > 6) ? argv[6]: 0;
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
