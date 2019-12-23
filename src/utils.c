@@ -367,32 +367,57 @@ void free_ptrs(void **ptrs, int n)
     free(ptrs);
 }
 
+/*
+**  读取文件中的某一行，通用（仅读取一行，其读取的结果中不再有换行符或者eof，这两个符号在返回之前被处理掉了）
+**  输入： *fp 打开的文件流指针
+**  输出： 读到的整行字符，返回C风格字符数组指针，如果读取失败，返回0
+*/
 char *fgetl(FILE *fp)
 {
     if(feof(fp)) return 0;
     size_t size = 512;
     char *line = malloc(size*sizeof(char));
+
+    // char* fgets(char * str, int count, FILE *stream)：从给定文件流读取最多count-1个字符并将它们存储于str所指向的字符数组
+    // 若文件尾出现或发现换行符则终止分析，后一情况下str将包含一个换行符。若读入字节且无错误发生，则紧随写入到str的最后一个字符后写入空字符。
+    // 注意终止符（换行符号以及eof）也会存储到str中。如果数据读取失败，返回空指针。
     if(!fgets(line, size, fp)){
         free(line);
         return 0;
     }
 
-    size_t curr = strlen(line);
+    // size_t strlen( const char *str ); 返回给定空终止字符串的长度，即首元素为 str 所指，且不包含首个空字符的字符数组中的字符数。
+    // 若 str 不是指向空终止字节字符串的指针则行为未定义
+    size_t curr = strlen(line); // 读到的字符串长度
 
+    // int feof( FILE *stream ); 检查是否已抵达给定文件流的结尾, 若已抵达流尾则返回非零值，否则为 ​0​
+    // 如果一整行数据顺利读入到line中，那么line[curr-1]应该会是换行符或者eof；这样就可以绕过while循环中的处理；否则说明这行数据未读完，line空间不够，需要重新分配，重新读取
     while((line[curr-1] != '\n') && !feof(fp)){
+
+        // 当已读字符串长度等于开始设置的512-1个字符(最后一个为0)，说明设置的512已经存不下了
         if(curr == size-1){
-            size *= 2;
-            line = realloc(line, size*sizeof(char));
+            size *= 2; // 大小增大到两倍
+
+            // void *realloc( void *ptr, size_t new_size );重新分配给定的内存区域。它必须是之前为 malloc() 、 calloc() 或 realloc() 所分配，并且仍未被 free 或 realloc 的调用所释放。否则，结果未定义。
+            // 重新分配按以下二者之一执行：
+            // a) 可能的话，扩张或收缩 ptr 所指向的已存在内存。内容在新旧大小中的较小者范围内保持不变。若扩张范围，则数组新增部分的内容是未定义的。
+            // b) 分配一个大小为 new_size 字节的新内存块，并复制大小等于新旧大小中较小者的内存区域，然后释放旧内存块。
+            line = realloc(line, size*sizeof(char)); // 重新分配内存
             if(!line) {
                 printf("%ld\n", size);
                 malloc_error();
             }
         }
-        size_t readsize = size-curr;
+
+        // 之前因为line空间不够，没有读完一整行，此处不是从头开始读，而是接着往下读，并接着往下存（fgets会记着上一次停止读数据的地方）
+        size_t readsize = size-curr; // 剩下还未读到的字符串长度
         if(readsize > INT_MAX) readsize = INT_MAX-1;
         fgets(&line[curr], readsize, fp);
         curr = strlen(line);
     }
+    
+    // '\n'并不是我们想要的有效字符，因此，将其置为'\0'，这样便于以后的处理。
+    // '\0'是C风格字符数组的terminating null-character，识别C字符数组时，以此为终点（不包括此字符）
     if(line[curr-1] == '\n') line[curr-1] = '\0';
 
     return line;

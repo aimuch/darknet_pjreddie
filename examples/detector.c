@@ -558,7 +558,22 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
     }
 }
 
-
+/** 本函数是检测模型的一个前向推理测试函数.
+ *  Parameters:
+ *          datacfg       数据集信息文件路径（也即cfg/*.data文件），文件中包含有关数据集的信息，比如cfg/coco.data
+ *          cfgfile        网络配置文件路径（也即cfg/*.cfg文件），包含一个网络所有的结构参数，比如cfg/yolo.cfg
+ *          weightfile     已经训练好的网络权重文件路径，比如darknet网站上下载的yolo.weights文件
+ *          filename       待进行检测的图片路径（单张图片）
+ *          thresh        阈值，类别检测概率大于该阈值才认为其检测结果有效
+ *          hier_thresh   
+ *          outfile
+ *          fullscreen
+ *  
+ *  NOTE:   该函数为一个前向推理测试函数，不包括训练过程，因此如果要使用该函数，必须提前训练好网络，并加载训练好的网络参数文件，
+ *          这些文件可以在作者网站上根据作者的提示下载到。本函数由darknet.c中的主函数调用，严格来说，本文件不应纳入darknet网络结构文件夹中，
+ *          其只是一个测试文件，或者说是一个example，应该放入到example文件夹中（新版的darknet已经这样做了，可以在github上查看）。
+ *          本函数的流程为：.
+*/
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
 {
     list *options = read_data_cfg(datacfg);
@@ -839,6 +854,7 @@ void run_detector(int argc, char **argv)
     char *cfg = argv[4]; // 模型配置文件
     char *weights = (argc > 5) ? argv[5] : 0;
     char *filename = (argc > 6) ? argv[6]: 0;
+
     if(0==strcmp(argv[2], "test")) test_detector(datacfg, cfg, weights, filename, thresh, hier_thresh, outfile, fullscreen);
     else if(0==strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear);
     else if(0==strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
