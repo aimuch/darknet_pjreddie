@@ -595,10 +595,12 @@ typedef struct node{
     struct node *prev;
 } node;
 
+
+// 双链表结构体
 typedef struct list{
-    int size;
-    node *front;
-    node *back;
+    int size;    // 链表长度
+    node *front; // 链表第一个节点
+    node *back;  // 链表最后一个节点
 } list;
 
 pthread_t load_data(load_args args);

@@ -319,6 +319,7 @@ void file_error(char *s)
     exit(0);
 }
 
+
 list *split_str(char *s, char delim)
 {
     size_t i;
@@ -334,6 +335,11 @@ list *split_str(char *s, char delim)
     return l;
 }
 
+
+/*
+**  Pyhon中有该函数，此处用C语言实现：删除输入字符数组s中的空白符（包括'\n','\t',' '）
+**  此函数用来统一读入的配置文件格式，有些配置文件书写时可能含有空白符（但是不能含有逗号等其他的符号）
+*/
 void strip(char *s)
 {
     size_t i;
@@ -341,9 +347,14 @@ void strip(char *s)
     size_t offset = 0;
     for(i = 0; i < len; ++i){
         char c = s[i];
+
+        // offset为要剔除的字符数，比如offset=2，说明到此时需要剔除2个空白符，
+        // 剔除完两个空白符之后，后面的要往前补上，不能留空
         if(c==' '||c=='\t'||c=='\n') ++offset;
         else s[i-offset] = c;
     }
+
+    // 在修改后的字符数组最后紧跟一个terminating null-characteristic '\0'
     s[len-offset] = '\0';
 }
 

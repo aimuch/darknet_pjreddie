@@ -570,13 +570,15 @@ void validate_detector_recall(char *cfgfile, char *weightfile)
  *          fullscreen
  *  
  *  NOTE:   该函数为一个前向推理测试函数，不包括训练过程，因此如果要使用该函数，必须提前训练好网络，并加载训练好的网络参数文件，
- *          这些文件可以在作者网站上根据作者的提示下载到。本函数由darknet.c中的主函数调用，严格来说，本文件不应纳入darknet网络结构文件夹中，
- *          其只是一个测试文件，或者说是一个example，应该放入到example文件夹中（新版的darknet已经这样做了，可以在github上查看）。
- *          本函数的流程为：.
+ *          这些文件可以在作者网站上根据作者的提示下载到。
 */
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh, float hier_thresh, char *outfile, int fullscreen)
 {
+    // 从指定数据文件datacfg（.data文件）中读入数据信息（测试、训练数据信息）到options中
+    // options是list类型数据，其中的node包含的void指针具体是kvp数据类型，具有键值和值（类似C++中的Map）
     list *options = read_data_cfg(datacfg);
+
+    // 获取数据集的名称（包括路径），第二个参数"names"表明要从options中获取所用数据集的名称信息（如names = data/coco.names）
     char *name_list = option_find_str(options, "names", "data/names.list");
     char **names = get_labels(name_list);
 
