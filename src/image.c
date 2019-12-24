@@ -220,19 +220,47 @@ void draw_bbox(image a, box bbox, int w, float r, float g, float b)
     }
 }
 
+/*
+**  加载data/labels/文件夹中所有的标签图片. 所谓标签图片, 就是仅含有单个字符的小图片, 各标签图片组合在一起, 就可以得到完成的类别标签, 
+**  data/labels含有8套美国标准ASCII码32~127号字符, 每套间仅大小(尺寸)不同, 以应对不同大小的图片
+**  返回: image**, 二维数组, 8行128列(8行是有8套, 128列是因为ASCII码有128个), 实际有效为8行96列, 因为前32列为0; 每行包括一套32号~127号的ASCII标准码字符标签图片
+**  注意: image**实际有效值为后面的96列, 前32列为0指针, 之所以还要保留前32列, 是保持秩序统一, 便于之后的访问, 
+**       访问时, 直接将ASCII码转为整型值即可得到在image**中的索引号, 利于查找定位
+*/
 image **load_alphabet()
 {
     int i, j;
+
+    // 共有8套, 每套尺寸不同
+    // alphabets是一个二维image指针, 每行代表一套, 包含32~127个字符图片指针
     const int nsize = 8;
-    image **alphabets = calloc(nsize, sizeof(image));
+
+    // 为每行第一个字符标签图片动态分配内存。共有8行, 每行的首个元素都是存储image的指针
+    // 注意: 作者这里有错误calloc(nsize, sizeof(image))应该改为calloc(nsize, sizeof(image*));
+    // 因此calloc(8, sizeof(image*))(为指针分配内存不是为指针变量本身分配内存, 而是为其所指的内存块分配内存)
+    // calloc()这个动态分配函数会初始化元素值为0指针(malloc不会, 之前内存中遗留了什么就是什么, 不会重新初始化为0,
+    // 而这里需要重新初始化为0, 因此这里用的是calloc)
+    image **alphabets = calloc(nsize, sizeof(image*)); // 作者原始为: image **alphabets = calloc(nsize, sizeof(image));
+    
+    // 外循环8次, 读入8套字符标签图片
     for(j = 0; j < nsize; ++j){
+        // 为每列动态分配内存, 这里其实没有128个元素, 只有96个元素, 但是依然分配了128个元素, 
+        // 是为了便于之后的访问: 直接将ASCII码转为整型值就可以得到在image中的索引, 定位到相应的字符标签图片
         alphabets[j] = calloc(128, sizeof(image));
+
+        // 内循环从32开始, 读入32号~127号字符标签图片
         for(i = 32; i < 127; ++i){
             char buff[256];
-            sprintf(buff, "data/labels/%d_%d.png", i, j);
+
+            // int sprintf( char *buffer, const char *format, ... );
+            // 按照指定格式将字符串输出至字符数组buffer中, 得到每个字符标签图片的完整名称
+            sprintf(buff, "data/labels/%d_%d.png", i, j); // sprintf会将空字符作为结尾写入到字符串中
+
+            // 读入彩色图(3通道)
             alphabets[j][i] = load_image_color(buff, 0, 0);
         }
     }
+
     return alphabets;
 }
 
@@ -595,6 +623,13 @@ void show_image_collapsed(image p, char *name)
     free_image(c);
 }
 
+/*
+**  创建一张空image, 指定图片的宽, 高, 通道三个属性, 同时初始化数据为图片数据为0指针(此函数还未为图片数据分配内存)
+**  输入:  w  图片宽
+**        h  图片高
+**        c  图片通道
+**  返回: image
+*/
 image make_empty_image(int w, int h, int c)
 {
     image out;
@@ -605,9 +640,19 @@ image make_empty_image(int w, int h, int c)
     return out;
 }
 
+/*
+**  创建一张image, 并为image的图像数据动态分配内存
+**  输入: w  图片宽
+**       h  图片高
+**       c  图片通道
+**  返回: 已经指定宽, 高, 通道数属性, 并已动态分配好内存的image, 可以往里面存入数据了
+*/
 image make_image(int w, int h, int c)
 {
+    // 创建一张空图片(仅指定了图片的三个属性, 未分配图像数据的内存)
     image out = make_empty_image(w,h,c);
+
+    // 为图像数据动态分配内存: 总共有h*w*c个元素, 每个元素的字节数为sizeof(float)
     out.data = calloc(h*w*c, sizeof(float));
     return out;
 }
@@ -1289,39 +1334,99 @@ void test_resize(char *filename)
 #endif
 }
 
-
+/*
+**  调用开源库stb_image.h中的函数stbi_load()读入指定图片, 并转为darkenet的image类型后返回image变量
+**  输入:  filename    图片路径
+**        channels   期待图片通道
+**  返回: image类型变量, 像素值被归一化至0~1, 彩色图存储方式为rrr...ggg...bbb...(只有一行), 
+**       三通道分开存储, 每通道的二维数据按行存储(所有行并成一行), 而后三通道再拼成一行存储
+**  说明: stbi_load()返回的值是unsigned char*类型, 且数据存储方式是rgbrgb...格式(只有一行), 
+**       而darknet中的image是三个通道分开存储的(但还是只有一行), 类似这种形式: rrr...ggg...bbb...
+**       本函数完成了类型以及存储格式的转换；第二个参数channels是期待的图片的通道数, 
+**       如果读入图片通道数不等于channels, 会进行强转(在stbi_load()函数内部完成转换), 
+**       这和opencv中的图片读入函数类似, 同样可以指定读入图片的通道, 比如即使图片是彩色图, 
+**       也可以通过指定通道数读入灰度图。
+*/
 image load_image_stb(char *filename, int channels)
 {
     int w, h, c;
+
+    // stbi_load()是开源库stb_image.h中的函数, 读入指定图片, 返回unsigned char*类型数据
+    // 该库是用C语言写的专门用来读取图片数据的(非常复杂), 读入二维图片按行存储到data中(所有行并成一行), 
+    // 此处w,h,c为读入图片的宽, 高, 通道, 为读入图片后在stbi_load中赋值的, c是图片的真实通道数, 彩色图为3通道, 灰度图为单通道
+    // 而channels是期待的图像通道(也是输出的图的通道数, 转换之后的), 因此如果c!=channels, stbi_load()会进行通道转换, 
+    // 比如图片是彩色图, 那么c=3, 而如果channels指定为1, 说明只想读入灰度图, 
+    // stbi_load()函数会完成这一步转换, 最终输出通道为channels=1的灰度图像数据
+    // 从下面的代码可知, 如果data是三通道的, 那么data存储方式是三通道交叉存储的即rgbrgb...方式, 且全部都存储在一行中
+    // 注意: channels的取值必须取1,2,3,4中的某个, 如果不是, 会发生断言, 中断程序
     unsigned char *data = stbi_load(filename, &w, &h, &c, channels);
     if (!data) {
         fprintf(stderr, "Cannot load image \"%s\"\nSTB Reason: %s\n", filename, stbi_failure_reason());
         exit(0);
     }
+
+    // stbi_load()函数读入的图片数据格式为unsigned char*类型, 
+    // 接下来要转换为darknet中的image类型
+    // 这个if语句没有必要, 因子stbi_load()中要求channels必须为1,2,3,4, 否则会发生断言, 
+    // 且stbi_load()函数会判断c是否等于channels, 如果不相等, 则会进行通道转换(灰度转换), 
+    // 所以直接令c = channels即可
     if(channels) c = channels;
+    
     int i,j,k;
+
+    // 创建一张图片, 并分配必要的内存
     image im = make_image(w, h, c);
-    for(k = 0; k < c; ++k){
-        for(j = 0; j < h; ++j){
-            for(i = 0; i < w; ++i){
-                int dst_index = i + w*j + w*h*k;
-                int src_index = k + c*i + c*w*j;
+    for(k = 0; k < c; ++k){           // 外循环: c通道(k)
+        for(j = 0; j < h; ++j){       // 中循环: h行(j)
+            for(i = 0; i < w; ++i){   // 内循环: w列(i)
+                // 转完之后的像素索引: dst_index=i+w*j+w*h*k, 其中i表示在im.data中的列偏移, 
+                // w*j表示换行偏移, w*h*k表示换通道偏移, 因此转完后得到的im.data是三通道分开
+                // 存储的, 且每通道都是将二维数据按行存储(所有行并成一行), 然后三通道再并成一行
+                int dst_index = i + w*j + w*h*k; // rrrgggbbb...rrrgggbbb
+
+                // 在data中的存储方式是三通道杂揉在一起的: rgbrgbrgb..., 因此, 
+                // src_index = k + c(i+w*j)中, i+w*j表示单通道的偏移, 乘以c则包括总共3通道的偏移, 
+                // 加上w表示要读取w通道的灰度值。
+                // 比如, 图片原本是颜色图, 因此data原本应该是rgbrgbrgb...类型的数据, 
+                // 但如果指定的channels=1,data将是经过转换后通道数为1的图像数据, 这时k=0, 只能读取一个通道的数据;
+                // 如果channels=3, 那么data保持为rgbrgbrgb...存储格式, 这时w=0将读取所有r通道的数据, 
+                // w=1将读取所有g通道的数据, w=2将读取所有b通道的数据
+                int src_index = k + c*i + c*w*j; //rgbrgbrgb...rgbrgbrgb
+
+                // 图片的灰度值转换为0~1(强转为float型)
                 im.data[dst_index] = (float)data[src_index]/255.;
             }
         }
     }
+    // 及时释放已经用完的data的内存
     free(data);
+
     return im;
 }
 
+/*
+**  读入指定名称的图片
+**  输入:  filename  图片路径
+**        w        期待的图片宽度
+**        h        期待的图片高度
+**        c        通道数(彩色为3)
+**  说明: w,h是期待的图片宽和高, 如果指定为0,0,那么这两个参数根本没有用到, 
+**       如果两个都指定为非0的值, 那么会与读入图片的尺寸进行比较, 如果不相等, 
+**       会按照指定的大小对图像大小进行重排, 这样就可以得到期待大小的图片尺寸      
+*/
 image load_image(char *filename, int w, int h, int c)
 {
 #ifdef OPENCV
+    // 如果定义了OPENCV则调用opencv中的函数读入图片, c为指定通道
     image out = load_image_cv(filename, c);
 #else
+    // load_image_stb()将调用开源的用C语言编写的读入图片的函数(此函数非常复杂), 
+    // 并完成数据类型以及图片灰度存储格式的转换
+    // 输出的out灰度值被归一化到0~1之间, 只有一行, 且按照rrr...ggg...bbb...方式存储(如果是3通道)
     image out = load_image_stb(filename, c);
 #endif
 
+    // 比较读入图片的尺寸是否与期望尺寸相等, 如不等则调用resize_image函数按指定尺寸重排
     if((h && w) && (h != out.h || w != out.w)){
         image resized = resize_image(out, w, h);
         free_image(out);
@@ -1330,8 +1435,20 @@ image load_image(char *filename, int w, int h, int c)
     return out;
 }
 
+/*
+**  读入指定图片, 该函数其实没有做任何事情, 只是调用了load_iamge()函数, 
+**  另外从函数名可以看出, 此处是读入彩色图像, 因此图像通道数被固定为3
+**  输入: filename  图片路径
+**        w       期待的图片宽度
+**        h       期待的图片高度
+**  说明: w, h是期待的图片宽和高, 如果指定为0,0,那么这两个参数根本没有用到, 
+**       如果两个都指定为非0的值, 那么会与读入图片的尺寸进行比较, 如果不相等, 
+**       会按照指定的大小对图像大小进行重排, 这样就可以得到期待大小的图片尺寸 
+*/
 image load_image_color(char *filename, int w, int h)
 {
+    // 调用load_image()函数, 读入图片, 该函数视是否使用opencv调用不同的函数读入图片
+    // 最后一个参数3指定通道数为3(彩色图)
     return load_image(filename, w, h, 3);
 }
 

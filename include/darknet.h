@@ -505,11 +505,14 @@ typedef struct {
     float aspect;
 } augment_args;
 
+/**
+** 存储图像数据的结构体(不一定是一张图片的, 可能是多张图片拼接在一起存储)
+*/
 typedef struct {
-    int w;
-    int h;
-    int c;
-    float *data;
+    int w;      // 每张图片的高度(行)
+    int h;      // 每张图片的宽度(列)
+    int c;      // 每张图片的通道数
+    float *data; // 数据头, 存储二维的图像数据, 按行存储, 如果有多张, 则每张按行存储, 然后所有图片再并成一大行
 } image;
 
 typedef struct{

@@ -9,16 +9,29 @@
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
+
+/*
+**  从文件filename中读取数据信息(不是具体的图像数据, 只是关于数据的相关信息), 存至链表返回: 依次调用fgetl() -> list_insert()函数
+**  输入:  filename  文件名称
+**  输出:  list指针, 包含从文件中读取的信息
+**  调用:  比如在data.c -> get_labels()调用, 目的是为了从data/**.names文件中, 读取所有物体类别的名称/标签信息;
+**        在train_detector()中调用, 目的是从train.txt(该文件的生成参考Yolo官网)中读入所有训练图片的路径(文件中每一行就是一张图片的全路径)
+*/
 list *get_paths(char *filename)
 {
     char *path;
     FILE *file = fopen(filename, "r");
     if(!file) file_error(filename);
+
     list *lines = make_list();
+
+    // fgetl读入一整行到path, 并将其插入到列表lines中
     while((path=fgetl(file))){
         list_insert(lines, path);
     }
+
     fclose(file);
+
     return lines;
 }
 
@@ -654,11 +667,30 @@ matrix load_tags_paths(char **paths, int n, int k)
     return y;
 }
 
+/*
+**  首先调用get_paths()从filename中读取数据到list变量中, 而后调用list_to_array()转存至二维字符数组中返回
+**  输入:  *filename  文件路径
+**  文件内容举例: 
+**              bird
+**              boat
+**              bus
+**              car
+**              cat
+**  返回:  char**类型, 包含从文件中读取的所有信息(该函数只用于读入名称/标签信息, 即读取data/**.names文件的信息)
+**  调用:  该函数在detector.c->test_detector()函数中调用, 目的正如函数名, 从文件中读取数据集中所有类别的名称/标签信息
+*/
 char **get_labels(char *filename)
 {
+    // 从包含数据集中所有物体类别信息的文件(data/**.names文件)中读取所有物体类别信息, 存入链表plist中
     list *plist = get_paths(filename);
+
+    // 将所用数据集的所有类别信息(即包含所有类别的名称/标签信息)从plist中提取出来, 存至二维字符数组labels中
+    // labels将包含数据集中所有类别信息, 比如使用coco.data, 里面包含80类物体, 有person, bicycle等等
     char **labels = (char **)list_to_array(plist);
+    
+    // 将指针复制给labels之后，就可以释放plist了，不会影响labels的
     free_list(plist);
+    
     return labels;
 }
 
