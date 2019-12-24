@@ -1385,10 +1385,10 @@ image load_image_stb(char *filename, int channels)
                 int dst_index = i + w*j + w*h*k; // rrrgggbbb...rrrgggbbb
 
                 // 在data中的存储方式是三通道杂揉在一起的: rgbrgbrgb..., 因此, 
-                // src_index = k + c(i+w*j)中, i+w*j表示单通道的偏移, 乘以c则包括总共3通道的偏移, 
+                // src_index = k + c*(i+w*j)中, i+w*j表示单通道的偏移, 乘以c则包括总共3通道的偏移, 
                 // 加上w表示要读取w通道的灰度值。
                 // 比如, 图片原本是颜色图, 因此data原本应该是rgbrgbrgb...类型的数据, 
-                // 但如果指定的channels=1,data将是经过转换后通道数为1的图像数据, 这时k=0, 只能读取一个通道的数据;
+                // 但如果指定的channels=1, data将是经过转换后通道数为1的图像数据, 这时k=0, 只能读取一个通道的数据;
                 // 如果channels=3, 那么data保持为rgbrgbrgb...存储格式, 这时w=0将读取所有r通道的数据, 
                 // w=1将读取所有g通道的数据, w=2将读取所有b通道的数据
                 int src_index = k + c*i + c*w*j; //rgbrgbrgb...rgbrgbrgb
