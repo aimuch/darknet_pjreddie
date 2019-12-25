@@ -8,7 +8,7 @@
 */
 list *make_list()
 {
-	list *l = malloc(sizeof(list));
+	list *l = malloc(sizeof(list)); // list *l = calloc(1, sizeof(list));
 	l->size = 0;  // 双链表长度
 	l->front = 0; // 链表第一个节点赋0
 	l->back = 0;  // 链表最后一个节点赋0

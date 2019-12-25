@@ -313,9 +313,14 @@ void malloc_error()
     exit(-1);
 }
 
+/*
+** 打开文件错误，退出系统
+*/
 void file_error(char *s)
 {
     fprintf(stderr, "Couldn't open file: %s\n", s);
+    
+    // 退出程序
     exit(0);
 }
 

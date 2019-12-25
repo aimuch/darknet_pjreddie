@@ -587,7 +587,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
     // 加载data/labels/文件夹中所有的字符标签图片
     image **alphabet = load_alphabet();
 
-    // 加载网络配置和已有模型参数
+    // 解析网络配置和加载已有网络参数
     network *net = load_network(cfgfile, weightfile, 0);
 
 

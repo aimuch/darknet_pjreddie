@@ -50,9 +50,15 @@ load_args get_base_args(network *net)
     return args;
 }
 
+/*
+** 解析网络配置和加载已有网络参数
+*/
 network *load_network(char *cfg, char *weights, int clear)
 {
+    // 解析网络配置
     network *net = parse_network_cfg(cfg);
+
+    // 加载已有网络参数
     if(weights && weights[0] != 0){
         load_weights(net, weights);
     }
@@ -137,7 +143,7 @@ char *get_layer_string(LAYER_TYPE a)
         case GRU:
             return "gru";
         case LSTM:
-	    return "lstm";
+	        return "lstm";
         case CRNN:
             return "crnn";
         case MAXPOOL:

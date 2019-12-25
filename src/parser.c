@@ -37,9 +37,20 @@
 #include "lstm_layer.h"
 #include "utils.h"
 
+/*
+** 段结构体(神经网络一层参数)
+** 段中的内容如下:
+**            [convolutional]
+**            batch_normalize=1
+**            filters=64
+**            size=3
+**            stride=2
+**            pad=1
+**            activation=leaky
+*/
 typedef struct{
-    char *type;
-    list *options;
+    char *type;    // 段类型
+    list *options; // 段中的选项和参数结构体
 }section;
 
 list *read_cfg(char *filename);
@@ -739,9 +750,17 @@ int is_network(section *s)
             || strcmp(s->type, "[network]")==0);
 }
 
+
+/*
+** 解析网络配置
+*/
 network *parse_network_cfg(char *filename)
 {
+    // 从神经网络结构参数文件中读入所有神经网络层的结构参数, 存储到sections中, 
+    // sections的每个node包含一层神经网络的所有结构参数
     list *sections = read_cfg(filename);
+
+
     node *n = sections->front;
     if(!n) error("Config file has no sections");
     network *net = make_network(sections->size - 1);
@@ -888,22 +907,41 @@ network *parse_network_cfg(char *filename)
     return net;
 }
 
+/*
+**  读取神经网络结构配置文件(.cfg文件)中的配置数据, 将每个神经网络层参数读取到每个section结构体中, 
+**  (每个section是sections的一个节点)而后全部插入到list结构体sections中并返回
+**  输入: filename    C风格字符数组, 神经网络结构配置文件路径
+**  返回: list结构体指针, 包含从神经网络结构配置文件中读入的所有神经网络层的参数
+*/
 list *read_cfg(char *filename)
 {
+    // C风格文件流, "r", 只读模式, 要求filename必须存在, 否则返回空指针
     FILE *file = fopen(filename, "r");
     if(file == 0) file_error(filename);
-    char *line;
-    int nu = 0;
+
+    char *line; // 每行字符串数组
+    int nu = 0; // 行号
+
+    // 动态分配list对象内存, options包含所有的section, 即包含所有的神经网络层参数
     list *options = make_list();
+
+    // 一个section表示配置文件中的一个字段, 也就是对应神经网络结构中的一层
+    // 因此, 一个section将读取并存储某一层的参数以及该层的类别名
     section *current = 0;
+
+    // 调用fgetl读取文件中的一行(返回字符数组指针)
     while((line=fgetl(file)) != 0){
-        ++ nu;
-        strip(line);
+        ++ nu; // 行号自增
+
+        // 出去读入行的字符串数组中可能含有的空白符
+        strip(line); // 作者自己实现的类似于Python中的strip函数
+        
         switch(line[0]){
+            // 以 '[' 开头的行是层的类别说明, 比如[net], [maxpool], [convolutional]之类的
             case '[':
-                current = malloc(sizeof(section));
-                list_insert(options, current);
-                current->options = make_list();
+                current = malloc(sizeof(section)); // 动态分配一个section内存给current
+                list_insert(options, current);     // 将单个section current插入section集合sections中
+                current->options = make_list();    // 进一步动态的为current的元素options动态分配内存
                 current->type = line;
                 break;
             case '\0':
