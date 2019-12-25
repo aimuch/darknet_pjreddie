@@ -760,11 +760,22 @@ network *parse_network_cfg(char *filename)
     // sections的每个node包含一层神经网络的所有结构参数
     list *sections = read_cfg(filename);
 
-
+    // 获取sections的第一个节点, 可以查看一下cfg/***.cfg文件, 其实第一块参数(以[net]开头)不是某层神经网络的参数, 
+    // 而是关于整个网络的一些通用参数, 比如学习率, 衰减率, 输入图像宽高, batch大小等, 
+    // 具体的关于某个网络层的参数是从第二块开始的, 如[convolutional],[maxpool]..., 
+    // 这些层并没有编号, 只说明了层的属性, 但层的参数都是按顺序在文件中排好的, 读入时, 
+    // sections链表上的顺序就是文件中的排列顺序
     node *n = sections->front;
     if(!n) error("Config file has no sections");
+
+    // 创建网络结构并动态分配内存: 输入网络层数为sections->size - 1，sections的第一段不是网络层，而是通用网络参数
     network *net = make_network(sections->size - 1);
+    
+    // 所用显卡的卡号(gpu_index在cuda.c中用extern关键字声明)
+    // 在调用parse_network_cfg()之前，使用了cuda_set_device()设置了gpu_index的值号为当前活跃GPU卡号
     net->gpu_index = gpu_index;
+
+    // size_params结构体元素不含指针变量
     size_params params;
 
     section *s = (section *)n->val;
@@ -942,21 +953,28 @@ list *read_cfg(char *filename)
                 current = malloc(sizeof(section)); // 动态分配一个section内存给current
                 list_insert(options, current);     // 将单个section current插入section集合sections中
                 current->options = make_list();    // 进一步动态的为current的元素options动态分配内存
-                current->type = line;
+                current->type = line; // 以 '[' 开头的是层的类别, 赋值给type
                 break;
+            
+            // 以下三种情况是无效行, 直接释放内存即可(以#开头的是注释)
             case '\0':
             case '#':
             case ';':
-                free(line);
+                free(line); // C语言释放堆内存(动态分配的内存): 动态分配的内存一定要及时释放
                 break;
+
+            // 剩下的才真正是网络结构的数据, 调用read_option()函数读取
+            // 返回0说明文件中的数据格式有问题, 将会提示错误
             default:
                 if(!read_option(line, current->options)){
                     fprintf(stderr, "Config file error line %d, could parse: %s\n", nu, line);
-                    free(line);
+                    free(line); // C语言释放堆内存(动态分配的内存): 动态分配的内存一定要及时释放
                 }
                 break;
         }
     }
+
+    // 关闭已经打开的文件
     fclose(file);
     return options;
 }

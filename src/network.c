@@ -180,6 +180,11 @@ char *get_layer_string(LAYER_TYPE a)
     return "none";
 }
 
+/*
+** 新建一个空网络, 并为网络中部分指针参数动态分配内存
+** 输入: n  神经网络层数
+** 说明: 该函数只为网络的三个指针参数动态分配了内存, 并没有为所有指针参数分配内存
+*/
 network *make_network(int n)
 {
     network *net = calloc(1, sizeof(network));
