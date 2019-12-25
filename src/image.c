@@ -44,6 +44,10 @@ image mask_to_rgb(image mask)
     return im;
 }
 
+/*
+**  获取图片m中第c通道y行x列的像素值为并返回
+**  注意: m中的像素按行存储(各通道所有行并成一行, 然后所有通道再并成一行)
+*/
 static float get_pixel(image m, int x, int y, int c)
 {
     assert(x < m.w && y < m.h && c < m.c);
@@ -61,12 +65,24 @@ static float get_pixel_extend(image m, int x, int y, int c)
     if(c < 0 || c >= m.c) return 0;
     return get_pixel(m, x, y, c);
 }
+
+/*
+**  设置图片m中第c通道y行x列的像素值为val, 如果像素值位置超出图片范围, 则无作为
+**  注意：m中的像素按行存储(各通道所有行并成一行, 然后所有通道再并成一行)
+*/
 static void set_pixel(image m, int x, int y, int c, float val)
 {
     if (x < 0 || y < 0 || c < 0 || x >= m.w || y >= m.h || c >= m.c) return;
     assert(x < m.w && y < m.h && c < m.c);
+
     m.data[c*m.h*m.w + y*m.w + x] = val;
 }
+
+/*
+**  将输入图片m的c通道y行x列像素值叠加val(m的data是堆内存, 因此虽然m是按值传递, 
+**  但是函数内对data的改动在退出add_pixel函数后依然有效, 虽然如此, 个人感觉形参改按值传递为用指针应该更清晰些)
+**  注意: m中的像素按行存储(各通道所有行并成一行, 然后所有通道再并成一行)
+*/
 static void add_pixel(image m, int x, int y, int c, float val)
 {
     assert(x < m.w && y < m.h && c < m.c);
@@ -1241,46 +1257,105 @@ void saturate_exposure_image(image im, float sat, float exposure)
     constrain_image(im);
 }
 
+/*
+**  重排图片的尺寸
+**  输入:  im  待重排的图片
+**         w  新的图片宽度
+**         h  新的图片高度
+**  返回: 目标图片(缩放后的图片)resized
+**  思路: 1)此处重排并不是保持像素个数意义上的重排, 像素个数是可以变的, 即图像缩放, 这就涉及到像素插值操作;
+**       2)重排操作分两步完成, 第一步图像行数不变, 仅缩放图像的列数, 而后在水平方向上(x方向)进行像素线性插值, 
+**       3)第二步, 在第一步基础上, 保持列数不变(列在第一步已经缩放完成), 缩放行数, 在竖直方向(y方向)进行像素线性插值, 
+**         两步叠加在一起, 其实就相当于是双线性插值
+**  NOTE: 与opencv实现方式有区别
+**  OpenCV IplImage is CWH (channel, width, height) packaged - and INT [0 - 255] values
+**  Darknet image is WHC (width, height, channel) packaged - and FLOAT [0 - 1] values
+*/
 image resize_image(image im, int w, int h)
 {
-    image resized = make_image(w, h, im.c);   
+    // 创建目标图像: 宽高分别为w、h(为最终目标图像的尺寸), 通道数和原图保持一样
+    image resized = make_image(w, h, im.c);
+
+    // 创建中间过渡图像: 宽为w, 高保持与原图一样, 中间图像为第一步缩放插值之后的结果
     image part = make_image(w, im.h, im.c);
     int r, c, k;
+
+    // 计算目标函数与原图宽高比例(分子分母都减了1, 因为四周边缘上的像素不需要插值, 直接等于原图四周边缘像素值就可以?)
     float w_scale = (float)(im.w - 1) / (w - 1);
     float h_scale = (float)(im.h - 1) / (h - 1);
-    for(k = 0; k < im.c; ++k){
-        for(r = 0; r < im.h; ++r){
-            for(c = 0; c < w; ++c){
+
+    // Step 1: 缩放宽, 保持高度不变
+    for(k = 0; k < im.c; ++k){      // 遍历所有通道(注意不管是通道还是行、列, 都是按中间过渡图像尺寸遍历, 因为要获取中间过渡图像每个像素的值)
+        for(r = 0; r < im.h; ++r){  // 遍历所有行
+            for(c = 0; c < w; ++c){ // 遍历所有列
                 float val = 0;
+
+                // 对于中间图像右边缘上的点, 其直接就等于原图对应行右边缘上的点的像素值, 不需要进行线性插值(没法插值, 右边没有像素了), 
+                // 如果原图的宽度就为1,那么也不用插值了, 不管怎么缩放, 中间图像所有像素值就为原图对应行的像素值
+                // 是不是少考虑中间图像左边缘上的像素？左边缘上的像素也不用插值, 直接等于原图对应行左边缘像素值就可以了, 
+                // 只不过这里没有放到if语句中(其实也可以的), 并到else中了(简单分析一下就可知道else中包括了这种情况的处理), 
+                // 个人感觉此处处理不是最佳的, 直接在if语句中考虑左右两边的像素更为清晰
                 if(c == w-1 || im.w == 1){
                     val = get_pixel(im, im.w-1, r, k);
                 } else {
+                    // 正常情况, 都是需要插值的, c*w_scale为中间过渡图像c列对应在原图中的列数
                     float sx = c*w_scale;
                     int ix = (int) sx;
+
+                    // sx一般不为整数, 所以需要用ix及ix+1列处两个像素进行线性插值获得中间图c列(r行)处的像素值
                     float dx = sx - ix;
+
+                    // 线性插值：像素值的权重与到两个像素的坐标距离成反比(分别获取原图im的k通道r行ix和ix+1列处的像素值)
                     val = (1 - dx) * get_pixel(im, ix, r, k) + dx * get_pixel(im, ix+1, r, k);
                 }
+
+                // 设置中间图part的k通道r行, c列处的像素值为val
                 set_pixel(part, c, r, k, val);
             }
         }
     }
-    for(k = 0; k < im.c; ++k){
-        for(r = 0; r < h; ++r){
+
+    // Step 2: 在第一步的基础上, 保持列数不变, 缩放高度
+    // 遍历所有通道(注意不管是通道还是行、列, 都是按最终目标图像尺寸遍历, 因为要获取目标图像每个像素的值)
+    for(k = 0; k < im.c; ++k){  // 遍历所有通道
+        for(r = 0; r < h; ++r){ // 遍历所有行
+
+            // 过程和第一步类似
+            // 获取目标图片中第r行对应在中间过渡图中的行数
             float sy = r*h_scale;
             int iy = (int) sy;
             float dy = sy - iy;
+
             for(c = 0; c < w; ++c){
+                // 获取中间图像part的k通道iy行c列处的像素值
                 float val = (1-dy) * get_pixel(part, c, iy, k);
                 set_pixel(resized, c, r, k, val);
             }
+            // 如果是下边缘上的像素, 或者原图的高度等于1, 那么就没有必要插值了, 直接跳过
+            // 至于上边缘, 在下面的for循环中考虑了(此时sy=0,iy=0,dy=0)
             if(r == h-1 || im.h == 1) continue;
+
+            // 正常情况, 需要进行线性像素插值: 叠加上下一行的加权像素值
             for(c = 0; c < w; ++c){
                 float val = dy * get_pixel(part, c, iy+1, k);
+
+                // 将resized图像k通道r行c列的像素值叠加val
                 add_pixel(resized, c, r, k, val);
             }
+            
+
+            // // 上面两次循环的合并版
+            // for(c = 0; c < w; ++c){
+            //     float val0 = (1-dy) * get_pixel(part, c, iy, k);
+            //     set_pixel(resized, c, r, k, val0);
+            //     if(r == h-1 || im.h == 1) continue;
+            //     float val1 = dy * get_pixel(part, c, iy+1, k);
+            //     add_pixel(resized, c, r, k, val1);
+            // }
         }
     }
 
+    // 释放中间图像part的堆内存, 并返回目标图像
     free_image(part);
     return resized;
 }
@@ -1384,14 +1459,14 @@ image load_image_stb(char *filename, int channels)
                 // 存储的, 且每通道都是将二维数据按行存储(所有行并成一行), 然后三通道再并成一行
                 int dst_index = i + w*j + w*h*k; // rrrgggbbb...rrrgggbbb
 
-                // 在data中的存储方式是三通道杂揉在一起的: rgbrgbrgb..., 因此, 
-                // src_index = k + c*(i+w*j)中, i+w*j表示单通道的偏移, 乘以c则包括总共3通道的偏移, 
-                // 加上w表示要读取w通道的灰度值。
-                // 比如, 图片原本是颜色图, 因此data原本应该是rgbrgbrgb...类型的数据, 
+                // 在data中的存储方式是三通道交叉在一起的: rgbrgbrgb..., 因此, 
+                // src_index = k + c*i + c*w*j中, k表示换通道偏移, c*i表示单通道(当前通道)偏移, c*w*j表示行偏移, 
+                // 加上k表示要读取k通道的灰度值。
+                // 比如, 图片原本是彩色图, 因此data原本应该是rgbrgbrgb...类型的数据, 
                 // 但如果指定的channels=1, data将是经过转换后通道数为1的图像数据, 这时k=0, 只能读取一个通道的数据;
-                // 如果channels=3, 那么data保持为rgbrgbrgb...存储格式, 这时w=0将读取所有r通道的数据, 
-                // w=1将读取所有g通道的数据, w=2将读取所有b通道的数据
-                int src_index = k + c*i + c*w*j; //rgbrgbrgb...rgbrgbrgb
+                // 如果channels=3, 那么data保持为rgbrgbrgb...存储格式, 这时k=0将读取所有r通道的数据, 
+                // k=1将读取所有g通道的数据, k=2将读取所有b通道的数据
+                int src_index = k + c*i + c*w*j; //rgbrgbrgb...
 
                 // 图片的灰度值转换为0~1(强转为float型)
                 im.data[dst_index] = (float)data[src_index]/255.;
@@ -1412,7 +1487,9 @@ image load_image_stb(char *filename, int channels)
 **        c        通道数(彩色为3)
 **  说明: w,h是期待的图片宽和高, 如果指定为0,0,那么这两个参数根本没有用到, 
 **       如果两个都指定为非0的值, 那么会与读入图片的尺寸进行比较, 如果不相等, 
-**       会按照指定的大小对图像大小进行重排, 这样就可以得到期待大小的图片尺寸      
+**       会按照指定的大小对图像大小进行重排, 这样就可以得到期待大小的图片尺寸   
+**  OpenCV IplImage is CWH (channel, width, height) packaged - and INT [0 - 255] values
+**  Darknet image is WHC (width, height, channel) packaged - and FLOAT [0 - 1] values   
 */
 image load_image(char *filename, int w, int h, int c)
 {
@@ -1429,6 +1506,8 @@ image load_image(char *filename, int w, int h, int c)
     // 比较读入图片的尺寸是否与期望尺寸相等, 如不等则调用resize_image函数按指定尺寸重排
     if((h && w) && (h != out.h || w != out.w)){
         image resized = resize_image(out, w, h);
+
+        // 释放图像数据
         free_image(out);
         out = resized;
     }
