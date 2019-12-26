@@ -61,7 +61,7 @@ typedef enum{
 } BINARY_ACTIVATION;
 
 /** 
- * 网络结构类型(枚举类型), 对应的整型值由CONVOLUTIONAL从0开始往下编号, 共24中网络类型(最后一个对应的整型值为23).
+** 网络结构类型(枚举类型), 对应的整型值由CONVOLUTIONAL从0开始往下编号, 共24中网络类型(最后一个对应的整型值为23).
 */
 typedef enum {
     CONVOLUTIONAL,
@@ -96,8 +96,12 @@ typedef enum {
     BLANK     // 表示未识别的网络层名称
 } LAYER_TYPE;
 
+
+/** 
+** 损失函数(枚举类型)
+*/
 typedef enum{
-    SSE, MASKED, L1, SEG, SMOOTH,WGAN
+    SSE, MASKED, L1, SEG, SMOOTH, WGAN
 } COST_TYPE;
 
 typedef struct{
@@ -119,26 +123,36 @@ struct layer;
 typedef struct layer layer;
 
 struct layer{
-    LAYER_TYPE type;
-    ACTIVATION activation;
-    COST_TYPE cost_type;
-    void (*forward)   (struct layer, struct network);
-    void (*backward)  (struct layer, struct network);
-    void (*update)    (struct layer, update_args);
+    LAYER_TYPE type;        // 网络层的类型, 枚举类型, 取值比如DROPOUT,CONVOLUTIONAL,MAXPOOL分别表示dropout层, 卷积层, 最大池化层, 可参见LAYER_TYPE枚举类型的定义
+    ACTIVATION activation;  // 激活函数类型
+    COST_TYPE cost_type;    // 损失函数类型
+    void (*forward)   (struct layer, struct network);       // 前向传播函数指针, 在具体初始化每个网络层的时候才会赋相应的函数指针
+    void (*backward)  (struct layer, struct network);       // 反向传播函数指针, 在具体初始化每个网络层的时候才会赋相应的函数指针
+    void (*update)    (struct layer, update_args);          
     void (*forward_gpu)   (struct layer, struct network);
     void (*backward_gpu)  (struct layer, struct network);
     void (*update_gpu)    (struct layer, update_args);
-    int batch_normalize;
+
+    int batch_normalize;    // 是否进行BN, 如果进行BN, 则值为1
     int shortcut;
-    int batch;
+    int batch;              // 一个batch中含有的图片张数, 等于net.batch, 详细可以参考network.h中的注释, 一般在构建具体网络层时赋值(比如make_maxpool_layer()中)
     int forced;
     int flipped;
-    int inputs;
-    int outputs;
-    int nweights;
-    int nbiases;
+
+    int inputs;             // 一张输入图片所含的元素个数(一般在各网络层构建函数中赋值, 比如make_connected_layer()), 第一层的值等于l.h*l.w*l.c, 
+                            // 之后的每一层都是由上一层的输出自动推算得到的(参见parse_network_cfg(), 在构建每一层后, 会更新params.inputs为上一层的l.outputs)
+    
+    int outputs;            // 该层对应一张输入图片的输出元素个数(一般在各网络层构建函数中赋值, 比如make_connected_layer())
+                            // 对于一些网络, 可由输入图片的尺寸及相关参数计算出, 比如卷积层, 可以通过输入尺寸以及跨度、核大小计算出; 
+                            // 对于另一些尺寸, 则需要通过网络配置文件指定, 如未指定, 取默认值1, 比如全连接层(见parse_connected()函数)
+    
+    int nweights;           // 网络参数数量
+    int nbiases;            // 偏置数量
     int extra;
-    int truths;
+
+    int truths;             // 根据region_layer.c判断, 这个变量表示一张图片含有的真实值的个数, 对于检测模型来说, 一个真实的标签含有5个值, 
+                            // 包括类型对应的编号以及定位矩形框用到的w,h,x,y四个参数, 且在darknet中, 固定每张图片最大处理30个矩形框(可查看max_boxes参数), 
+                            // 因此, 在region_layer.c的make_region_layer()函数中, 赋值为30*5
     int h,w,c;
     int out_h, out_w, out_c;
     int n;
@@ -214,13 +228,24 @@ struct layer{
     float scale;
 
     char  * cweights;
-    int   * indexes;
+
+    int   * indexes;            // 维度为l.out_h * l.out_w * l.out_c * l.batch, 可知包含整个batch输入图片的输出, 一般在构建具体网络层时动态分配内存(比如make_maxpool_layer()中). 
+                                // 目前仅发现其用在在最大池化层中. 该变量存储的是索引值, 并与当前层所有输出元素一一对应, 表示当前层每个输出元素的值是上一层输出中的哪一个元素值(存储的索引值是
+                                // 在上一层所有输出元素(包含整个batch)中的索引), 因为对于最大池化层, 每一个输出元素的值实际是上一层输出(也即当前层输入)某个池化区域中的最大元素值, indexes就是记录
+                                // 这些局部最大元素值在上一层所有输出元素中的总索引. 记录这些值有什么用吗？当然有, 用于反向传播过程计算上一层敏感度值, 详见backward_maxpool_layer()以及forward_maxpool_layer()函数. 
+
     int   * input_layers;
     int   * input_sizes;
     int   * map;
     int   * counts;
     float ** sums;
-    float * rand;
+
+    float * rand;                // 这个参数目前只发现用在dropout层, 用于存储一些列的随机数, 这些随机数与dropout层的输入元素一一对应, 维度为l.batch*l.inputs(包含整个batch的), 在make_dropout_layer()函数中用calloc动态分配内存, 
+                                // 并在前向传播函数forward_dropout_layer()函数中逐元素赋值. 里面存储的随机数满足0~1均匀分布, 干什么用呢？用于决定该输入元素的去留, 
+                                // 我们知道dropout层就完成一个事：按照一定概率舍弃输入神经元(所谓舍弃就是置该输入的值为0), rand中存储的值就是如果小于l.probability, 则舍弃该输入神经元(详见：forward_dropout_layer()). 
+                                // 为什么要保留这些随机数呢？和最大池化层中的l.indexes类似, 在反向传播函数backward_dropout_layer()中用来指示计算上一层的敏感度值, 因为dropout舍弃了一些输入, 
+                                // 这些输入(dropout层的输入, 上一层的输出)对应的敏感度值可以置为0, 而那些没有舍弃的输入, 才有必要由当前dropout层反向传播过去. 
+
     float * cost;
     float * state;
     float * prev_state;
@@ -235,17 +260,33 @@ struct layer{
 
     float * binary_weights;
 
-    float * biases;
-    float * bias_updates;
+    float * biases;              // 当前层所有偏置, 对于卷积层, 维度l.n, 每个卷积核有一个偏置; 对于全连接层, 维度等于单张输入图片对应的元素个数即outputs, 
+                                // 一般在各网络构建函数中动态分配内存(比如make_connected_layer())
+    
+    float * bias_updates;        // 当前层所有偏置更新值, 对于卷积层, 维度l.n, 每个卷积核有一个偏置; 对于全连接层, 维度为outputs. 所谓权重系数更新值, 
+                                // 就是梯度下降中与步长相乘的那项, 也即误差对偏置的导数, 一般在各网络构建函数中动态分配内存(比如make_connected_layer())
 
     float * scales;
     float * scale_updates;
 
-    float * weights;
-    float * weight_updates;
+    float * weights;             // 当前层所有权重系数(连接当前层和上一层的系数, 但记在当前层上), 对于卷积层, 维度为l.n*l.c*l.size*l.size, 
+                                // 即卷积核个数乘以卷积核尺寸再乘以输入通道数(各个通道上的权重系数独立不一样); 
+                                // 对于全连接层, 维度为单张图片输入与输出元素个数之积inputs*outputs, 一般在各网络构建函数中动态分配内存(比如make_connected_layer())
+    
+    float * weight_updates;      // 当前层所有权重系数更新值, 对于卷积层维度为l.n*l.c*l.size*l.size; 对于全连接层, 维度为单张图片输入与输出元素个数之积inputs*outputs, 
+                                // 所谓权重系数更新值, 就是梯度下降中与步长相乘的那项, 也即误差对权重的导数, 一般在各网络构建函数中动态分配内存(比如make_connected_layer()
 
-    float * delta;
-    float * output;
+    float * delta;               // 存储每一层的敏感度图: 包含所有输出元素的敏感度值(整个batch所有图片). 所谓敏感度, 即误差函数关于当前层每个加权输入的导数值, 
+                                // 关于敏感度图这个名称, 可以参考https://www.zybuluo.com/hanbingtao/note/485480. 
+                                // 元素个数为l.batch * l.outputs(其中l.outputs = l.out_h * l.out_w * l.out_c), 
+                                // 对于卷积神经网络, 在make_convolutional_layer()动态分配内存, 按行存储, 可视为l.batch行, l.outputs列, 
+                                // 即batch中每一张图片, 对应l.delta中的一行, 而这一行, 又可以视作有l.out_c行, l.out_h*l.out_c列, 
+                                // 其中每小行对应一张输入图片的一张输出特征图的敏感度. 一般在构建具体网络层时动态分配内存(比如make_maxpool_layer()中). 
+    
+    float * output;              // 存储该层所有的输出, 维度为l.out_h * l.out_w * l.out_c * l.batch, 可知包含整个batch输入图片的输出, 
+                                // 一般在构建具体网络层时动态分配内存(比如make_maxpool_layer()中)
+                                // 按行存储：每张图片按行铺排成一大行, 图片间再并成一行
+    
     float * loss;
     float * squared;
     float * norms;
@@ -333,9 +374,10 @@ struct layer{
     struct layer *ug;
     struct layer *wg;
 
-    tree *softmax_tree;
+    tree *softmax_tree;             // softmax层用到的一个参数, 不过这个参数似乎并不常见, 很多用到softmax层的网络并没用使用这个参数, 目前仅发现darknet9000.cfg中使用了该参数, 
+                                    // 如果未用到该参数, 其值为NULL, 如果用到了则会在parse_softmax()中赋值, 目前个人的初步猜测是利用该参数来组织标签数据, 以方便访问
 
-    size_t workspace_size;
+    size_t workspace_size;          // net.workspace的元素个数, 为所有层中最大的l.out_h*l.out_w*l.size*l.size*l.c(在make_convolutional_layer()计算得到workspace_size的大小, 在parse_network_cfg()中动态分配内存, 此值对应未使用gpu时的情况)
 
 #ifdef GPU
     int *indexes_gpu;
@@ -464,7 +506,7 @@ typedef struct network{
     float eps;
 
     int inputs;             // 一张输入图片的元素个数, 如果网络配置文件中未指定, 则默认等于net->h * net->w * net->c, 在parse_net_options()中赋值
-    int outputs;            // 一张输入图片对应的输出元素个数, 对于一些网络, 可由输入图片的尺寸及相关参数计算出, 比如卷积层, 可以通过输入尺寸以及跨度、核大小计算出；
+    int outputs;            // 一张输入图片对应的输出元素个数, 对于一些网络, 可由输入图片的尺寸及相关参数计算出, 比如卷积层, 可以通过输入尺寸以及跨度、核大小计算出; 
                             // 对于另一些尺寸, 则需要通过网络配置文件指定, 如未指定, 取默认值1, 比如全连接层
     int truths;
     int notruth;
@@ -495,14 +537,14 @@ typedef struct network{
     
     float *workspace;    // 整个网络的工作空间, 其元素个数为所有层中最大的l.workspace_size = l.out_h*l.out_w*l.size*l.size*l.c
                         // (在make_convolutional_layer()计算得到workspace_size的大小, 在parse_network_cfg()中动态分配内存, 
-                        // 此值对应未使用gpu时的情况), 该变量貌似不轻易被释放内存, 目前只发现在network.c的resize_network()函数对其进行了释放。
+                        // 此值对应未使用gpu时的情况), 该变量貌似不轻易被释放内存, 目前只发现在network.c的resize_network()函数对其进行了释放. 
                         // net.workspace充当一个临时工作空间的作用, 存储临时所需要的计算参数, 比如每层单张图片重排后的结果
                         // (这些参数马上就会参与卷积运算), 一旦用完, 就会被马上更新(因此该变量的值的更新频率比较大)
     
     int train;          // 标志参数, 网络是否处于训练阶段, 如果是, 则值为1(这个参数一般用于训练与测试有不同操作的情况, 比如dropout层, 对于训练, 才需要进行forward_dropout_layer()函数, 对于测试, 不需要进入到该函数)
     int index;          // 标志参数, 当前网络的活跃层(活跃包括前向和反向, 可参考network.c中forward_network()与backward_network()函数)
     
-    float *cost;
+    float *cost;         // 目标函数值, 该参数不是所有层都有的, 一般在网络最后一层拥有, 用于计算最后的cost, 比如识别模型中的cost_layer层, 检测模型中的region_layer层
     float clip;
 
 #ifdef GPU

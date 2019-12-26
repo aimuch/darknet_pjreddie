@@ -62,8 +62,17 @@ static inline float hardtan_gradient(float x)
     if (x > -1 && x < 1) return 1;
     return 0;
 }
-static inline float linear_gradient(float x){return 1;}
-static inline float logistic_gradient(float x){return (1-x)*x;}
+
+// 返回线性激活函数(就是f(x)=x)关于输入x的导数值
+static inline float linear_gradient(float x){
+    return 1;
+} 
+
+// 返回logistic (sigmoid) function关于输入x的导数值
+static inline float logistic_gradient(float x){
+    return (1-x)*x;
+}
+
 static inline float loggy_gradient(float x)
 {
     float y = (x+1.)/2.;
@@ -74,13 +83,26 @@ static inline float stair_gradient(float x)
     if (floor(x) == x) return 0;
     return 1;
 }
-static inline float relu_gradient(float x){return (x>0);}
-static inline float elu_gradient(float x){return (x >= 0) + (x < 0)*(x + 1);}
+
+// 返回线性矫正单元(ReLU)非线性激活函数关于输入x的导数
+static inline float relu_gradient(float x){
+    return (x>0);
+}
+
+// 返回指数线性单元(Exponential Linear Unit, ELU)非线性激活函数关于输入x的导数值
+static inline float elu_gradient(float x){
+    return (x >= 0) + (x < 0)*(x + 1);
+}
 static inline float selu_gradient(float x){return (x >= 0)*1.0507 + (x < 0)*(x + 1.0507*1.6732);}
 static inline float relie_gradient(float x){return (x>0) ? 1 : .01;}
 static inline float ramp_gradient(float x){return (x>0)+.1;}
 static inline float leaky_gradient(float x){return (x>0) ? 1 : .1;}
-static inline float tanh_gradient(float x){return 1-x*x;}
+
+// 返回leaky ReLU非线性激活函数关于输入x的导数值
+static inline float tanh_gradient(float x){
+    return 1-x*x;
+}
+
 static inline float plse_gradient(float x){return (x < 0 || x > 1) ? .01 : .125;}
 
 #endif

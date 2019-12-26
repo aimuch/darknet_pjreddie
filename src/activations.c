@@ -138,6 +138,7 @@ void activate_array(float *x, const int n, const ACTIVATION a)
 */
 float gradient(float x, ACTIVATION a)
 {
+    // 以下分别求取各种激活函数对输入的导数值, 详见各个导数求取函数的内部注释
     switch(a){
         case LINEAR:
             return linear_gradient(x);
