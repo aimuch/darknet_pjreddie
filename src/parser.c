@@ -50,11 +50,19 @@
 */
 typedef struct{
     char *type;    // 段类型
-    list *options; // 段中的选项和参数结构体
+    list *options; // 存放段中的选项和参数结构体
 }section;
 
 list *read_cfg(char *filename);
 
+/*
+**  将网络的类别转为darknet中定义的标准类别(枚举类型, 在layer.h中定义)
+**  .cfg网络结构参数配置文件中, 有各种网络层类别名称, 诸如[maxpool],[region]等等, 
+**  此函数就是通过比较字符串(C风格字符数组)来解析网络层类别, 输出darknet中定义的标准网络类别名称(枚举类型)
+**  输入: type     从神经网络结构配置文件(.cfg)中读入的关于网络类别的字符数组(如type=[convolutional])
+**  输出: LAYER_TYPE   枚举类型, 是layer.h中定义的所有的网络层类别之一, 如果遇到未能识别的字符数组, 则返回BLANK
+**  说明: 有些网络层可以有两种名称(缩写之类的)
+*/
 LAYER_TYPE string_to_layer_type(char * type)
 {
 
@@ -94,22 +102,52 @@ LAYER_TYPE string_to_layer_type(char * type)
             || strcmp(type, "[softmax]")==0) return SOFTMAX;
     if (strcmp(type, "[route]")==0) return ROUTE;
     if (strcmp(type, "[upsample]")==0) return UPSAMPLE;
+    
+    // 如果没有一个匹配上, 说明配置文件中存在不能识别的网络层名称, 
+    // 返回BLANK(这时应该去检查下配置文件, 看看是否有拼写错误)
     return BLANK;
 }
 
+
+/*
+** 释放setction内存, section结构体含有两个指针元素: type和options, 两个都是动态分配内存的, 
+** kvp结构体包含key和val两个指针元素, 在option_list.c中的read_option()函数中, 
+** 可以看到val并不是动态分配的内存,而在上一级函数read_cfg()中可以溯源看到key是动态分配的内存, 
+** 因此, key和val, 只能用free()释放key的内存, 而val是万万不能够的(因为key和val都是由同一个指针指向, 不过是val在可以的基础上有偏移值)。
+** 释放顺序: 在直接释放section实例之前, 需要首先释放其子元素的内存, 直接释放section实例, 
+** 只会释放type,options指针变量本身占据的内存(注意, 在darknet中, 所有的section本身都是动态分配内存的) , 
+** 这种嵌套内存的释放非常值得学习, 注意不管什么数据, 如若该类型数据还有子元素, 那么先释放子元素的内存, 再能直接释放其本身的内存
+**
+*/
 void free_section(section *s)
 {
+    // 释放s的type指针内存
     free(s->type);
+
+    // s的另一个元素options是一个list, 嵌套有多个节点node, 每个node存储一条信息, 需要逐条释放内存
+    // 获取s->options的第一个node并释放其内存
     node *n = s->options->front;
     while(n){
+        // 获取node中的val
         kvp *pair = (kvp *)n->val;
+
+        // 释放key
         free(pair->key);
+
+        // 此处绝不能:free(pair->val), 从read_option()可以看出key和val都是由line同一个指针指向, 不过是val在可以的基础上有偏移值
         free(pair);
+
+        // 在直接释放n直接, 先获取下一个节点的指针, 不然下一个节点的指针将无从获取
         node *next = n->next;
         free(n);
+
+        // 令n等于下一个节点的指针, 在下次循环中释放
         n = next;
     }
+    // 直接释放options
     free(s->options);
+
+    // 最终直接释放s
     free(s);
 }
 
@@ -186,30 +224,44 @@ layer parse_deconvolutional(list *options, size_params params)
     return l;
 }
 
-
+/*
+** 解析卷积层
+*/
 convolutional_layer parse_convolutional(list *options, size_params params)
 {
-    int n = option_find_int(options, "filters",1);
-    int size = option_find_int(options, "size",1);
-    int stride = option_find_int(options, "stride",1);
-    int pad = option_find_int_quiet(options, "pad",0);
-    int padding = option_find_int_quiet(options, "padding",0);
-    int groups = option_find_int_quiet(options, "groups", 1);
-    if(pad) padding = size/2;
+    int n = option_find_int(options, "filters",1); // 获取卷积核个数, 若配置文件中没有指定, 则设为1
+    int size = option_find_int(options, "size",1);// 获取卷积核尺寸, 若配置文件中没有指定, 则设为1
+    int stride = option_find_int(options, "stride",1); // 获取步长, 若配置文件中没有指定, 则设为1
+    int pad = option_find_int_quiet(options, "pad",0); // 是否在输入图像四周补0,若需要补0,值为1; 若配置文件中没有指定, 则设为0,不补0
+    int padding = option_find_int_quiet(options, "padding",0); // 四周补0的长读, 下面这句代码多余, 有if(pad)这句就够了
+    int groups = option_find_int_quiet(options, "groups", 1);  // 分组卷积组数
+    if(pad) padding = size/2; // 如若需要补0,补0长度为卷积核一半长度(往下取整), 这对应same补0策略
 
+    // 获取该层使用的激活函数类型, 若配置文件中没有指定, 则使用logistic激活函数
     char *activation_s = option_find_str(options, "activation", "logistic");
     ACTIVATION activation = get_activation(activation_s);
 
+    // h, w, c为上一层的输出的高度/宽度/通道数(第一层的则是输入的图片的尺寸与通道数, 也即net.h, net.w, net.c), batch所有层都一样(不变), 
+    // params.h, params.w, params.c及params.inputs在构建每一层之后都会更新为上一层相应的输出参数(参见parse_network_cfg())
     int batch,h,w,c;
     h = params.h;
     w = params.w;
     c = params.c;
-    batch=params.batch;
+    batch = params.batch;
+
+    // 如果这三个数存在0值, 那肯定有问题了, 因为上一层(或者输入)必须不为0
     if(!(h && w && c)) error("Layer before convolutional layer must output image.");
+
+    // 是否进行规范化, 1表示进行规范化, 若配置文件中没有指定, 则设为0,即默认不进行规范化
     int batch_normalize = option_find_int_quiet(options, "batch_normalize", 0);
+
+    // 是否对权重进行二值化, 1表示进行二值化, 若配置文件中没有指定, 则设为0,即默认不进行二值化
     int binary = option_find_int_quiet(options, "binary", 0);
+
+    // 是否对权重以及输入进行二值化, 1表示是, 若配置文件中没有指定, 则设为0,即默认不进行二值化
     int xnor = option_find_int_quiet(options, "xnor", 0);
 
+    // 以上已经获取到了构建一层卷积层的所有参数, 现在可以用这些参数构建卷积层了
     convolutional_layer layer = make_convolutional_layer(batch,h,w,c,n,groups,size,stride,padding,activation, batch_normalize, binary, xnor, params.net->adam);
     layer.flipped = option_find_int_quiet(options, "flipped", 0);
     layer.dot = option_find_float_quiet(options, "dot", 0);
@@ -663,18 +715,27 @@ learning_rate_policy get_policy(char *s)
     return CONSTANT;
 }
 
+
+/*
+** 解析网络通用选项和参数
+*/
 void parse_net_options(list *options, network *net)
 {
-    net->batch = option_find_int(options, "batch",1);
+    // 从.cfg网络参数配置文件中读入一些通用的网络配置参数, option_find_int()以及option_find_float()函数的第三个参数都是默认值(如果配置文件中没有设置该参数的值, 就取默认值)
+    // batch参数, 首先读入的net->batch是真实batch值, 即每个batch中包含的照片张数, 而后又读入一个subdivisions参数, 
+    // 最终的net->batch = net->batch / net->subdivisions
+    net->batch = option_find_int(options, "batch", 1);
     net->learning_rate = option_find_float(options, "learning_rate", .001);
     net->momentum = option_find_float(options, "momentum", .9);
     net->decay = option_find_float(options, "decay", .0001);
     int subdivs = option_find_int(options, "subdivisions",1);
     net->time_steps = option_find_int_quiet(options, "time_steps",1);
     net->notruth = option_find_int_quiet(options, "notruth",0);
+    
     net->batch /= subdivs;
     net->batch *= net->time_steps;
     net->subdivisions = subdivs;
+    
     net->random = option_find_int_quiet(options, "random", 0);
 
     net->adam = option_find_int_quiet(options, "adam", 0);
@@ -687,6 +748,8 @@ void parse_net_options(list *options, network *net)
     net->h = option_find_int_quiet(options, "height",0);
     net->w = option_find_int_quiet(options, "width",0);
     net->c = option_find_int_quiet(options, "channels",0);
+
+    // 一张输入图片的元素个数, 如果网络配置文件没有指定, 则默认值为net->h * net->w * net->c
     net->inputs = option_find_int_quiet(options, "inputs", net->h * net->w * net->c);
     net->max_crop = option_find_int_quiet(options, "max_crop",net->w*2);
     net->min_crop = option_find_int_quiet(options, "min_crop",net->w);
@@ -768,19 +831,22 @@ network *parse_network_cfg(char *filename)
     node *n = sections->front;
     if(!n) error("Config file has no sections");
 
-    // 创建网络结构并动态分配内存: 输入网络层数为sections->size - 1，sections的第一段不是网络层，而是通用网络参数
+    // 创建网络结构并动态分配内存: 输入网络层数为sections->size - 1, sections的第一段不是网络层, 而是通用网络参数
     network *net = make_network(sections->size - 1);
     
     // 所用显卡的卡号(gpu_index在cuda.c中用extern关键字声明)
-    // 在调用parse_network_cfg()之前，使用了cuda_set_device()设置了gpu_index的值号为当前活跃GPU卡号
+    // 在调用parse_network_cfg()之前, 使用了cuda_set_device()设置了gpu_index的值号为当前活跃GPU卡号
     net->gpu_index = gpu_index;
 
-    // size_params结构体元素不含指针变量
+    // size_params结构体中的net元素为指针变量
     size_params params;
 
+    /* 提取网络的通用参数, 即[net] or [network] 段的参数*/
     section *s = (section *)n->val;
-    list *options = s->options;
+    list *options = s->options; // 选项和参数
     if(!is_network(s)) error("First section must be [net] or [network]");
+    
+    // 解析网络通用参数
     parse_net_options(options, net);
 
     params.h = net->h;
@@ -792,16 +858,23 @@ network *parse_network_cfg(char *filename)
     params.net = net;
 
     size_t workspace_size = 0;
-    n = n->next;
+    n = n->next;     // 获取第一层网络
     int count = 0;
-    free_section(s);
+    free_section(s); // 释放之前的存放[net] or [network]的指针
+
+    // 此处stderr不是错误提示, 而是输出结果提示, 提示网络结构
     fprintf(stderr, "layer     filters    size              input                output\n");
+    
+    // 解析每层网络
     while(n){
         params.index = count;
         fprintf(stderr, "%5d ", count);
         s = (section *)n->val;
-        options = s->options;
-        layer l = {0};
+        options = s->options; // 每层网络的选项和参数
+
+        layer l = {0}; // 定义网络层
+
+        // 获取网络层的类型
         LAYER_TYPE lt = string_to_layer_type(s->type);
         if(lt == CONVOLUTIONAL){
             l = parse_convolutional(options, params);

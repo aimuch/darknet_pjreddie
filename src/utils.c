@@ -285,6 +285,9 @@ void top_k(float *a, int n, int k, int *index)
     }
 }
 
+/*
+** 打印错误信息并退出程序
+*/
 void error(const char *s)
 {
     perror(s);
@@ -552,11 +555,16 @@ float *parse_fields(char *line, int n)
     return field;
 }
 
+/*
+** 将以a为首地址此后n个元素相加, 返回总和
+*/
 float sum_array(float *a, int n)
 {
     int i;
     float sum = 0;
-    for(i = 0; i < n; ++i) sum += a[i];
+    for(i = 0; i < n; ++i){
+        sum += a[i];
+    }
     return sum;
 }
 

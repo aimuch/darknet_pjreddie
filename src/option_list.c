@@ -194,14 +194,31 @@ char *option_find_str(list *l, char *key, char *def)
     return def;
 }
 
+/*
+**  按给定键值key从l中查找对应的参数值, 主要调用option_find()函数.
+**  功能和上一个函数option_find_str()基本一样, 只不过多了一步处理, 将输出转为了int之后再输出.
+**  输入: l    list指针, 实际为section结构体中的options元素, 包含该层神经网络的所有配置参数
+**       key  键值, 即参数名称, 比如卷积核尺寸size, 卷积核个数filters, 跨度stride等等
+**       def  默认值, 如果没有找到对应键值的参数值, 则使用def作为默认值
+**  输出: int类型(该函数专门用来查找整数数值), 即参数值, 比如filters的值为96, size的值为11等
+*/
 int option_find_int(list *l, char *key, int def)
 {
+    // 在l中查找key的值, 返回C风格字符数组, 若未找到, 返回空指针
     char *v = option_find(l, key);
+
+    // 不为空, 则调用atoi()函数将v转为整型并返回
     if(v) return atoi(v);
+
+    // 若为空, 说明未找到, 返回默认值, 并输出提示信息
     fprintf(stderr, "%s: Using default '%d'\n", key, def);
     return def;
 }
 
+/*
+**  与上面的option_find_int()函数基本一样, 唯一的区别就是使用默认值时, 没有在屏幕上输出
+**  Using default...字样的提示, 因此叫做quiet(就是安安静静的使用默认值, 没有提示)
+*/
 int option_find_int_quiet(list *l, char *key, int def)
 {
     char *v = option_find(l, key);
@@ -209,17 +226,34 @@ int option_find_int_quiet(list *l, char *key, int def)
     return def;
 }
 
+/*
+**  按给定键值key从l中查找对应的参数值, 主要调用option_find()函数。
+**  功能和函数option_find_int()基本一样, 只不过最后调用atof()函数将字符串转为了float类型数据, 而不是整型数据。
+**  输入: l    list指针, 实际为section结构体中的options元素, 包含该层神经网络的所有配置参数
+**       key  键值, 即参数名称, 比如卷积核尺寸size, 卷积核个数filters, 跨度stride等等
+**       def  默认值, 如果没有找到对应键值的参数值, 则使用def作为默认值
+**  输出: float类型(该函数专门用来识别浮点型数值), 即参数值, 比如momentum的值为0.9, decay的值为0.0005等
+*/
+float option_find_float(list *l, char *key, float def)
+{
+    // 在l中查找key的值, 返回C风格字符数组, 若未找到, 返回空指针
+    char *v = option_find(l, key);
+
+    // 不为空, 则调用atof()函数将v转为浮点型并返回
+    if(v) return atof(v);
+
+    // 若未空, 说明未找到, 返回默认值, 并输出提示信息
+    fprintf(stderr, "%s: Using default '%lf'\n", key, def);
+    return def;
+}
+
+/*
+**  与上面的option_find_float()函数基本一样, 唯一的区别就是使用默认值时, 没有在屏幕上输出
+**  Using default...字样的提示, 因此叫做quiet(就是安安静静的使用默认值, 没有提示)
+*/
 float option_find_float_quiet(list *l, char *key, float def)
 {
     char *v = option_find(l, key);
     if(v) return atof(v);
-    return def;
-}
-
-float option_find_float(list *l, char *key, float def)
-{
-    char *v = option_find(l, key);
-    if(v) return atof(v);
-    fprintf(stderr, "%s: Using default '%lf'\n", key, def);
     return def;
 }
