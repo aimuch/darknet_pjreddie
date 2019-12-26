@@ -496,8 +496,8 @@ void scale_bias(float *output, float *scales, int batch, int n, int size)
 ** 输入:  bias_updates  当前层所有偏置的更新值, 维度为l.n(即当前层卷积核的个数)
 **       delta         当前层的敏感度图(即l.delta)
 **       batch         一个batch含有的图片张数(即l.batch)
-**       n             当前层卷积核个数(即l.h)
-**       k             当前层输入特征图尺寸(即l.out_w*l.out_h)
+**       n             当前层卷积核个数(即l.n)
+**       size          当前层输入特征图尺寸(即l.out_w*l.out_h)
 ** 原理: 当前层的敏感度图l.delta是误差函数对加权输入的导数, 也就是偏置更新值, 只是其中每l.out_w*l.out_h个元素都对应同一个
 **      偏置, 因此需要将其加起来, 得到的和就是误差函数对当前层各偏置的导数(l.delta的维度为l.batch*l.n*l.out_h*l.out_w,
 **      可理解成共有l.batch行, 每行有l.n*l.out_h*l.out_w列, 而这一大行又可以理解成有l.n, l.out_h*l.out_w列, 这每一小行就
@@ -599,12 +599,22 @@ void backward_convolutional_layer(convolutional_layer l, network net)
     if(l.batch_normalize){
         backward_batchnorm_layer(l, net);
     } else {
+        // 计算偏置的更新值: 每个卷积核都有一个偏置, 偏置的更新值也即误差函数对偏置的导数, 这个导数的计算很简单, 实际所有的导数已经求完了, 都存储在l.delta中, 
+        // 接下来只需把l.delta中对应同一个卷积核的项加起来就可以(卷积核在图像上逐行逐列跨步移动做卷积, 每个位置处都有一个输出, 共有l.out_w*l.out_h个, 
+        // 这些输出都与同一个偏置关联, 因此将l.delta中对应同一个卷积核的项加起来即得误差函数对这个偏置的导数)
         backward_bias(l.bias_updates, l.delta, l.batch, l.n, k);
     }
 
-    for(i = 0; i < l.batch; ++i){
-        for(j = 0; j < l.groups; ++j){
+    // 遍历batch中的每张照片, 对于l.delta来说, 每张照片是分开存的, 因此其维度会达到: l.batch*l.n*l.out_w*l.out_h, 
+    // 对于l.weights,l.weight_updates以及上面提到的l.bias,l.bias_updates, 是将所有照片对应元素叠加起来
+    // (循环的过程就是叠加的过程, 注意gemm()这系列函数含有叠加效果, 不是覆盖输入C的值, 而是叠加到之前的C上), 
+    // 因此l.weights与l.weight_updates维度为l.n*l.size*l.size, l.bias与l.bias_updates的维度为l.h, 都与l.batch无关
+    for(i = 0; i < l.batch; ++i){       // 每张图片
+        for(j = 0; j < l.groups; ++j){  // 每个卷积组
             float *a = l.delta + (i*l.groups + j)*m*k;
+
+            // net.workspace的元素个数为所有层中最大的l.workspace_size(在make_convolutional_layer()计算得到workspace_size的大小，在parse_network_cfg()中动态分配内存，此值对应未使用gpu时的情况),
+            // net.workspace充当一个临时工作空间的作用，存储临时所需要的计算参数，比如每层单张图片重排后的结果(这些参数马上就会参与卷积运算)，一旦用完，就会被马上更新(因此该变量的值的更新频率比较大)
             float *b = net.workspace;
             float *c = l.weight_updates + j*l.nweights/l.groups;
 

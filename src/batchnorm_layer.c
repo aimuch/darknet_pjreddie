@@ -154,9 +154,12 @@ void forward_batchnorm_layer(layer l, network net)
     add_bias(l.output, l.biases, l.batch, l.out_c, l.out_h*l.out_w);
 }
 
+/*
+** 反向传播规范化网络层
+*/
 void backward_batchnorm_layer(layer l, network net)
 {
-    if(!net.train){
+    if(!net.train){ // 前向推导阶段
         l.mean = l.rolling_mean;
         l.variance = l.rolling_variance;
     }
