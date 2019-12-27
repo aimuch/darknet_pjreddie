@@ -559,7 +559,11 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         for(j = 0; j < l.groups; ++j){  // 卷积组数
             float *a = l.weights + j*l.nweights/l.groups;   // 每组所有卷积核(也即权重), 元素个数为l.n*l.c*l.size*l.size, 按行存储, 共有l*n行, l.c*l.size*l.size列
             float *b = net.workspace;                       // 对输入图像进行重排之后的图像数据
+            
+            // 对c进行指针偏移: 移到batch中下一张图片卷积组对应输出的起始位置(每循环一次, 将完成对一张图片的卷积操作, 产生的所有特征图的元素个数总和为n*m)
             float *c = l.output + (i*l.groups + j)*n*m;     // 每组存储一张输入图片(多通道)所有的输出特征图(输入图片是多通道的, 输出图片也是多通道的, 有多少个卷积核就有多少个通道, 每个卷积核得到一张特征图即为一个通道)
+            
+            // 同样, 输入也进行指针偏移, 移动到下一张图片卷积组元素的起始位置, 以便下一次循环处理(batch中每张图片的元素个数为通道数*高度*宽度, 即l.c*l.h*l.w)
             float *im =  net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w; // 每组输入的偏移指针
 
             if (l.size == 1) { // 1*1的卷积核
@@ -580,7 +584,7 @@ void forward_convolutional_layer(convolutional_layer l, network net)
             // n是输入b,c的列数, 具体含义为每个输出特征图的元素个数(out_h*out_w), 
             // k是输入a的列数也是b的行数, 具体含义为卷积核元素个数乘以输入图像的通道数(l.size*l.size*l.c), 
             // a,b,c即为三个参与运算的矩阵(用一维数组存储),alpha=beta=1为常系数, 
-            // a为所有卷积核集合,元素个数为l.n*l.c*l.size*l.size, 按行存储, 共有l*n行, l.c*l.size*l.size列, 
+            // a为所有卷积核集合, 元素个数为l.n*l.c*l.size*l.size, 按行存储, 共有l*n行, l.c*l.size*l.size列, 
             // 即a中每行代表一个可以作用在3通道上的卷积核, 
             // b为一张输入图像经过im2col_cpu重排后的图像数据(共有l.c*l.size*l.size行, l.out_w*l.out_h列), 
             // c为gemm()计算得到的值, 包含一张输入图片得到的所有输出特征图(每个卷积核得到一张特征图), c中一行代表一张特征图, 
