@@ -12,6 +12,9 @@
 #include "xnor_layer.h"
 #endif
 
+/*
+** 交换weights和binary_weights
+*/
 void swap_binary(convolutional_layer *l)
 {
     float *swap = l->weights;
@@ -25,12 +28,15 @@ void swap_binary(convolutional_layer *l)
 #endif
 }
 
+/*
+** l.binary_weights根据对应l.weights正负赋所有权重绝对值的均值mean, 正赋mean, 负赋-mean
+*/
 void binarize_weights(float *weights, int n, int size, float *binary)
 {
     int i, f;
     for(f = 0; f < n; ++f){
         float mean = 0;
-        for(i = 0; i < size; ++i){
+        for(i = 0; i < size; ++i){ // size为组卷积核元素个数
             mean += fabs(weights[f*size + i]);
         }
         mean = mean / size;
@@ -40,6 +46,9 @@ void binarize_weights(float *weights, int n, int size, float *binary)
     }
 }
 
+/*
+** l.binary_input根据对应的net.input正负赋1或-1
+*/
 void binarize_cpu(float *input, int n, float *binary)
 {
     int i;
@@ -519,34 +528,64 @@ void backward_bias(float *bias_updates, float *delta, int batch, int n, int size
     }
 }
 
+
+/*
+** 前向卷积层
+*/
 void forward_convolutional_layer(convolutional_layer l, network net)
 {
     int i, j;
 
+    // l.outputs = l.out_h * l.out_w * l.out_c在make各网络层函数中赋值(比如make_convolutional_layer()), 
+    // 对应每张输入图片的所有输出特征图的总元素个数(每张输入图片会得到n也即l.out_c张特征图)
+    // 初始化输出l.output全为0.0; 输入l.outputs*l.batch为输出的总元素个数, 其中l.outputs为batch中一个输入
+    // 对应的输出的所有元素的个数, l.batch为一个batch输入包含的图片张数; 0表示初始化所有输出为0; 
     fill_cpu(l.outputs*l.batch, 0, l.output, 1);
 
+    // 是否进行二值化操作(这个操作应该只有第一个卷积层使用吧？因为下面直接对net.input操作, 这个理解是错误的, 因为在forward_network()含中, 
+    // 每进行一层都会将net.input = l.output, 即下一层的输入被设置为当前层的输出)
     if(l.xnor){
-        binarize_weights(l.weights, l.n, l.c/l.groups*l.size*l.size, l.binary_weights);
-        swap_binary(&l);
-        binarize_cpu(net.input, l.c*l.h*l.w*l.batch, l.binary_input);
-        net.input = l.binary_input;
+        binarize_weights(l.weights, l.n, l.c/l.groups*l.size*l.size, l.binary_weights); // l.binary_weights根据对应l.weights正负赋所有权重绝对值的均值mean, 正赋mean, 负赋-mean
+        swap_binary(&l); // 将二值化后的binary_weights与weights交换
+        binarize_cpu(net.input, l.c*l.h*l.w*l.batch, l.binary_input); // l.binary_input根据对应的net.input正负赋1或-1
+        net.input = l.binary_input; // 将二值化后的输入赋给中间变量输入
     }
 
-    int m = l.n/l.groups;
-    int k = l.size*l.size*l.c/l.groups;
-    int n = l.out_w*l.out_h;
-    for(i = 0; i < l.batch; ++i){
-        for(j = 0; j < l.groups; ++j){
-            float *a = l.weights + j*l.nweights/l.groups;
-            float *b = net.workspace;
-            float *c = l.output + (i*l.groups + j)*n*m;
-            float *im =  net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w;
+    int m = l.n/l.groups;               // 该层卷积核个数
+    int k = l.size*l.size*l.c/l.groups; // 该层每组卷积核参数元素个数
+    int n = l.out_w*l.out_h;            // 该层输出特征图的尺寸(元素个数)
 
-            if (l.size == 1) {
+    for(i = 0; i < l.batch; ++i){       // 图像数量
+        for(j = 0; j < l.groups; ++j){  // 卷积组数
+            float *a = l.weights + j*l.nweights/l.groups;   // 每组所有卷积核(也即权重), 元素个数为l.n*l.c*l.size*l.size, 按行存储, 共有l*n行, l.c*l.size*l.size列
+            float *b = net.workspace;                       // 对输入图像进行重排之后的图像数据
+            float *c = l.output + (i*l.groups + j)*n*m;     // 每组存储一张输入图片(多通道)所有的输出特征图(输入图片是多通道的, 输出图片也是多通道的, 有多少个卷积核就有多少个通道, 每个卷积核得到一张特征图即为一个通道)
+            float *im =  net.input + (i*l.groups + j)*l.c/l.groups*l.h*l.w; // 每组输入的偏移指针
+
+            if (l.size == 1) { // 1*1的卷积核
                 b = im;
             } else {
+
+                // 将分组后的图像im变成按一定存储规则排列的数组b, 以方便、高效地进行矩阵(卷积)计算, 详细查看该函数注释(比较复杂)
+                // 注意im包含batch中所有图片的数据, 但是每次循环只处理一张(在本循环开始的时候对im进行了移位), 因此在im2col_cpu仅会对其中一张图片
+                // 进行重排, l.c/l.groups为每组单张图片的通道数, l.h为每张图片的高度, l.w为每张图片的宽度, l.size为卷积核尺寸, l.stride为跨度
+                // 得到的b为一张图片重排后的结果, 也是按行存储的一维数组(共有l.c*l.size*l.size行, l.out_w*l.out_h列), 
                 im2col_cpu(im, l.c/l.groups, l.h, l.w, l.size, l.stride, l.pad, b);
             }
+
+            // GEneral Matrix to Matrix Multiplication
+            // 此处在im2col_cpu操作基础上, 利用矩阵乘法c=alpha*a*b+beta*c完成对图像卷积的操作
+            // 0,0表示不对输入a,b进行转置, 
+            // m是输入a,c的行数, 具体含义为每个卷积核的个数, 
+            // n是输入b,c的列数, 具体含义为每个输出特征图的元素个数(out_h*out_w), 
+            // k是输入a的列数也是b的行数, 具体含义为卷积核元素个数乘以输入图像的通道数(l.size*l.size*l.c), 
+            // a,b,c即为三个参与运算的矩阵(用一维数组存储),alpha=beta=1为常系数, 
+            // a为所有卷积核集合,元素个数为l.n*l.c*l.size*l.size, 按行存储, 共有l*n行, l.c*l.size*l.size列, 
+            // 即a中每行代表一个可以作用在3通道上的卷积核, 
+            // b为一张输入图像经过im2col_cpu重排后的图像数据(共有l.c*l.size*l.size行, l.out_w*l.out_h列), 
+            // c为gemm()计算得到的值, 包含一张输入图片得到的所有输出特征图(每个卷积核得到一张特征图), c中一行代表一张特征图, 
+            // 各特征图铺排开成一行后, 再将所有特征图并成一大行, 存储在c中, 因此c可视作有l.n行, l.out_h*l.out_w列。
+            // 详细查看该函数注释(比较复杂)
             gemm(0,0,m,n,k,1,a,k,b,n,1,c,n);
         }
     }
@@ -585,7 +624,7 @@ void backward_convolutional_layer(convolutional_layer l, network net)
     // 计算当前层激活函数对加权输入的导数值并乘以l.delta相应元素, 从而彻底完成当前层敏感度图的计算, 得到当前层的敏感度图l.delta. 
     // l.output存储了该层网络的所有输出: 该层网络接受一个batch的输入图片, 其中每张图片经卷积处理后得到的特征图尺寸为: l.out_w,l.out_h, 
     // 该层卷积网络共有l.n个卷积核, 因此一张输入图片共输出l.n张宽高为l.out_w,l.out_h的特征图(l.outputs为一张图所有输出特征图的总元素个数), 
-    // 所以所有输入图片也即l.output中的总元素个数为: l.n*l.out_w*l.out_h*l.batch；
+    // 所以所有输入图片也即l.output中的总元素个数为: l.n*l.out_w*l.out_h*l.batch; 
     // l.activation为该卷积层的激活函数类型, l.delta就是gradient_array()函数计算得到的l.output中每一个元素关于激活函数函数输入的导数值, 
     // 注意, 这里直接利用输出值求得激活函数关于输入的导数值是因为神经网络中所使用的绝大部分激活函数关于输入的导数值都可以描述为输出值的函数表达式, 
     // 比如对于Sigmoid激活函数(记作f(x)), 其导数值为f(x)'=f(x)*(1-f(x)),因此如果给出y=f(x), 那么f(x)'=y*(1-y), 只需要输出值y就可以了, 不需要输入x的值, 
@@ -613,8 +652,8 @@ void backward_convolutional_layer(convolutional_layer l, network net)
         for(j = 0; j < l.groups; ++j){  // 每个卷积组
             float *a = l.delta + (i*l.groups + j)*m*k;
 
-            // net.workspace的元素个数为所有层中最大的l.workspace_size(在make_convolutional_layer()计算得到workspace_size的大小，在parse_network_cfg()中动态分配内存，此值对应未使用gpu时的情况),
-            // net.workspace充当一个临时工作空间的作用，存储临时所需要的计算参数，比如每层单张图片重排后的结果(这些参数马上就会参与卷积运算)，一旦用完，就会被马上更新(因此该变量的值的更新频率比较大)
+            // net.workspace的元素个数为所有层中最大的l.workspace_size(在make_convolutional_layer()计算得到workspace_size的大小, 在parse_network_cfg()中动态分配内存, 此值对应未使用gpu时的情况),
+            // net.workspace充当一个临时工作空间的作用, 存储临时所需要的计算参数, 比如每层单张图片重排后的结果(这些参数马上就会参与卷积运算), 一旦用完, 就会被马上更新(因此该变量的值的更新频率比较大)
             float *b = net.workspace;
             float *c = l.weight_updates + j*l.nweights/l.groups;
 

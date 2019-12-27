@@ -187,6 +187,13 @@ void scal_cpu(int N, float ALPHA, float *X, int INCX)
     for(i = 0; i < N; ++i) X[i*INCX] *= ALPHA;
 }
 
+/*
+**  初始化X数组所有元素的值为ALPHA
+**  输入:  N       X中包含的有效元素个数
+**        ALPHA   初始化的值
+**        X       待初始化的float数组指针
+**        INCX    步长(倍数步长), 即X中凡是INCX的倍数编号进行初始化赋值操作
+*/
 void fill_cpu(int N, float ALPHA, float *X, int INCX)
 {
     int i;
