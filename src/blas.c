@@ -91,6 +91,31 @@ void shortcut_cpu(int batch, int w1, int h1, int c1, float *add, int w2, int h2,
     }
 }
 
+/*
+** 有组织的计算输入数据x的平均值, 输出的mean是一个矢量, 比如如果x是多张3通道的图片, 那么mean的维度就为通道数3(即每张输入图片会得到3张特征图),
+** 为方便, 我们称这三个通道分别为第一, 第二, 第三通道, 由于每次训练输入的都是一个batch的图片, 因此最终会输出batch张三通道的图片, 
+** mean中的第一个元素就是第一个通道上全部batch张输出特征图所有元素的平均值, 依次类推
+** 本函数的主要用处之一应该就是实现batch normalization的第一步了! 
+** 输入： 
+**       x         包含所有数据, 比如l.output, 其包含的元素个数为l.batch*l.outputs
+**       batch     一个batch中包含的图片张数, 即l.batch
+**       filters    该层神经网络的滤波器个数, 也即该层网络输出图片的通道数(比如对卷积网络来说, 就是核的个数了)
+**       spatial   该层神经网络每张输出特征图的尺寸, 也即等于l.out_w*l.out_h
+**       mean      求得的平均值, 维度为filters, 也即每个滤波器对应有一个均值(每个滤波器会处理所有图片)
+** 说明1： 该函数的具体调用可以参考：batchnorm_layer.c中的forward_batchnorm_layer()函数
+** 说明2：mean_cpu()函数是一个纯粹的数学计算函数, 有组织的计算x中某些数据的均值, x的具体存储结构视具体情况而定, 
+**       在写注释时, 主要参考了batchnorm_layer.c中的forward_batchnorm_layer()函数对该函数的调用, 
+**       因此有些注释就加上了一些具体含义, 结合这些含义会有助于理解, 但还是要记住, 这是一个一般的数学计算函数, 
+**       不同地方调用该函数可能有不同的含义。
+** 说明3：均值是哪些数据的均值？x中包含了众多数据, mean中的每个元素究竟对应x中哪些数据的平均值呢？
+**       此处还是结合batchnorm_layer.c中的forward_batchnorm_layer()函数的调用来解释, 
+**       其中的x为l.output, 有l.batch行, 每行有l.out_c*l.out_w*l.out_h个元素, 每一行又可以分成
+**       l.out_c行, l.out_w*l.out_h列, 那么l.mean中的每一个元素, 是某一个通道上所有batch的输出的平均值
+**       (比如卷积层, 有3个核, 那么输出通道有3个, 每张输入图片都会输出3张特征图, 可以理解每张输出图片是3通道的, 
+**       若每次输入batch=64张图片, 那么将会输出64张3通道的图片, 而mean中的每个元素就是某个通道上所有64张图片
+**       所有元素的平均值, 比如第1个通道上, 所有64张图片像素平均值)
+** 说明4：在全连接层的前向传播函数中：sptial=1, 因为全连接层的输出可以看作是1*1的特征图
+*/
 void mean_cpu(float *x, int batch, int filters, int spatial, float *mean)
 {
     float scale = 1./(batch * spatial);

@@ -578,7 +578,7 @@ void forward_convolutional_layer(convolutional_layer l, network net)
             }
 
             // GEneral Matrix to Matrix Multiplication
-            // 此处在im2col_cpu操作基础上, 利用矩阵乘法c=alpha*a*b+beta*c完成对图像卷积的操作
+            // 此处在im2col_cpu操作基础上, 利用矩阵乘法 c = alpha*a*b + beta*c 完成对图像卷积的操作
             // 0,0表示不对输入a,b进行转置, 
             // m是输入a,c的行数, 具体含义为每个卷积核的个数, 
             // n是输入b,c的列数, 具体含义为每个输出特征图的元素个数(out_h*out_w), 
@@ -594,6 +594,7 @@ void forward_convolutional_layer(convolutional_layer l, network net)
         }
     }
 
+    // 如需要规范化(BN在非线性激活函数处理之前完成)
     if(l.batch_normalize){
         forward_batchnorm_layer(l, net);
     } else {

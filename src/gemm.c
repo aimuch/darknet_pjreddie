@@ -79,7 +79,6 @@ void gemm(int TA, int TB, int M, int N, int K, float ALPHA,
 **       输出的C也是按行存储(所有行并成一行)
 **  输入:  A,B,C   输入矩阵(一维数组格式)
 **        ALPHA   系数
-**        BETA    系数
 **        M       A,C的行数(不做转置)或者A'的行数(做转置), 此处A未转置, 故为A的行数
 **        N       B,C的列数(不做转置)或者B'的列数(做转置), 此处B未转置, 故为B的列数
 **        K       A的列数(不做转置)或者A'的列数(做转置), B的行数(不做转置)或者B'的行数(做转置), 此处A,B均未转置, 故为A的列数、B的行数
@@ -93,20 +92,25 @@ void gemm(int TA, int TB, int M, int N, int K, float ALPHA,
 **        函数名称gemm_nn()中的两个nn分别表示not transpose,  not transpose
 */
 void gemm_nn(int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
-        float *C, int ldc)
+            float *A, int lda, 
+            float *B, int ldb,
+            float *C, int ldc)
 {
-    int i,j,k;
-    #pragma omp parallel for
-    for(i = 0; i < M; ++i){ // 大循环: 遍历A的每一行, i表示A的第i行, 也是C的第i行
-        for(k = 0; k < K; ++k){ // 中循环: 遍历每一行的所有列, k表示A的第k列, 同时表示B的第k行
-            register float A_PART = ALPHA * A[i*lda+k]; // 先计算ALPHA * A(A中每个元素乘以ALPHA)
-            for(j = 0; j < N; ++j){ // 内循环: 遍历B中所有列, 每次大循环完毕, 将计算得到A*B一行的结果, j是B的第j列, 也是C的第j列
-                // A中的第i行k列与B中的k行i列对应相乘, 因为一个大循环要计算A*B整行之结果, 
-                // 因此, 这里用了一个内循环, 并没有直接乘以B[k*ldb+i]
-                // 每个内循环完毕, 将计算A*B整行的部分结果(A中第i行k列与B所有列第k行所有元素相乘的结果)
-                C[i*ldc+j] += A_PART*B[k*ldb+j];
+    int i_, j_, k_;
+    #pragma omp parallel for   // OpenMP中的并行处理
+
+    // C = alpha * A * B + C
+    for(i_ = 0; i_ < M; ++i_){ // 大循环: 遍历A的每一行, i_表示A的第i_行, 也是C的第i_行
+        for(k_ = 0; k_ < K; ++k_){ // 中循环: 遍历每一行的所有列, k_表示A的第k_列, 同时表示B的第k_行
+            
+            // register向编译器提示该变量将被大量使用, 如果可能, 建议将其保存在处理器寄存器中.
+            register float A_PART = ALPHA * A[i_*lda+k_]; // 先计算ALPHA * A(A中每个元素乘以ALPHA)
+            
+            for(j_ = 0; j_ < N; ++j_){ // 内循环: 遍历B中所有列, 每次大循环完毕, 将计算得到A*B一行的结果, j_是B的第j_列, 也是C的第j_列
+                // A中的第i_行k_列与B中的k_行j_列对应相乘, 因为一个大循环要计算A*B整行的结果, 
+                // 因此, 这里用了一个内循环, 并没有直接乘以B[k_*ldb+i_]
+                // 每个内循环完毕, 将计算A*B整行的部分结果(A中第i_行k_列与B所有列第k_行所有元素相乘的结果)
+                C[i_*ldc+j_] += A_PART*B[k_*ldb+j_];
             }
         }
     }
@@ -128,12 +132,12 @@ void gemm_nn(int M, int N, int K, float ALPHA,
 **       参考博客: http://www.voidcn.com/blog/thy_2014/article/p-6149690.html
 **       更为详细的注释参见: gemm_cpu()函数的注释
 **  说明2: 此函数在gemm_cpu()函数中调用, 是其中四种情况之一, A不进行转置,B转置
-**         函数名称gemm_nt()中的nt分别表示not transpose,  transpose
+**        函数名称gemm_nt()中的nt分别表示not transpose,  transpose
 */
 void gemm_nt(int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
-        float *C, int ldc)
+            float *A, int lda, 
+            float *B, int ldb,
+            float *C, int ldc)
 {
     int i,j,k;
     #pragma omp parallel for
@@ -153,10 +157,9 @@ void gemm_nt(int M, int N, int K, float ALPHA,
 }
 
 /*
-**  功能: 矩阵计算, 实际完成C = ALPHA * A' * B + BETA * C矩阵计算
+**  功能: 矩阵计算, 实际完成C = ALPHA * A' * B + C矩阵计算
 **  输入:  A,B,C   输入矩阵(一维数组格式)
 **        ALPHA   系数
-**        BETA    系数
 **        M       A,C的行数(不做转置)或者A'的行数(做转置), 此处A转置, 故为A'的行数
 **        N       B,C的列数(不做转置)或者B'的列数(做转置), 此处B未转置, 故为B的列数
 **        K       A的列数(不做转置)或者A'的列数(做转置), B的行数(不做转置)或者B'的行数(做转置), 此处A转置, B不转置, 故为A'的列数、B的行数
@@ -170,9 +173,9 @@ void gemm_nt(int M, int N, int K, float ALPHA,
 **         函数名称gemm_tn()中的tn分别表示transpose,  not transpose
 */
 void gemm_tn(int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
-        float *C, int ldc)
+            float *A, int lda, 
+            float *B, int ldb,
+            float *C, int ldc)
 {
     int i,j,k;
     #pragma omp parallel for
@@ -187,10 +190,9 @@ void gemm_tn(int M, int N, int K, float ALPHA,
 }
 
 /*
-**  功能: 矩阵计算, 实际完成C = ALPHA * A' * B' + BETA * C矩阵计算
+**  功能: 矩阵计算, 实际完成C = ALPHA * A' * B' + C矩阵计算
 **  输入:  A,B,C   输入矩阵(一维数组格式)
 **        ALPHA   系数
-**        BETA    系数
 **        M       A,C的行数(不做转置)或者A'的行数(做转置), 此处A转置, 故为A'的行数
 **        N       B,C的列数(不做转置)或者B'的列数(做转置), 此处B转置, 故为B'的列数
 **        K       A'的列数, B'的行数
@@ -201,12 +203,12 @@ void gemm_tn(int M, int N, int K, float ALPHA,
 **       参考博客: http://www.voidcn.com/blog/thy_2014/article/p-6149690.html
 **       更为详细的注释参见: gemm_cpu()函数的注释
 **  说明2: 此函数在gemm_cpu()函数中调用, 是其中四种情况之一, A,B都进行转置
-**         函数名称gemm_tt()中的tt分别表示transpose,  transpose
+**        函数名称gemm_tt()中的tt分别表示transpose,  transpose
 */
 void gemm_tt(int M, int N, int K, float ALPHA, 
-        float *A, int lda, 
-        float *B, int ldb,
-        float *C, int ldc)
+            float *A, int lda, 
+            float *B, int ldb,
+            float *C, int ldc)
 {
     int i,j,k;
     #pragma omp parallel for
@@ -261,8 +263,7 @@ void gemm_tt(int M, int N, int K, float ALPHA,
 **           对于gemm_nt()与gemm_tt(), 与上分析一样, 不再赘述了。此部分注释进行了测试, 对应测试文件darknet_test_gemm.c。
 **  强调:  这一系列的gemm()函数, 都带有叠加效果, 也即最终的值是保存在C中, 但这种保存并不是擦除式的保存, 而是叠加式的保存, 也就是说, 
 **        如果进入gemm()函数之前, 如果C的元素已经有值了, 那么这些值不会被擦除掉, 而是会将其叠加, 
-**        其实看式子就可以看出来: 此函数完成的是C = ALPHA * A * B + BETA * C矩阵运算。
-**          
+**        其实看式子就可以看出来: 此函数完成的是C = ALPHA * A * B + BETA * C矩阵运算.        
 */
 void gemm_cpu(int TA, int TB, int M, int N, int K, float ALPHA, 
         float *A, int lda, 
@@ -282,13 +283,13 @@ void gemm_cpu(int TA, int TB, int M, int N, int K, float ALPHA,
 
     // 根据需要, 调用下面四种函数之一
     if(!TA && !TB)
-        gemm_nn(M, N, K, ALPHA,A,lda, B, ldb,C,ldc);
+        gemm_nn(M, N, K, ALPHA, A, lda, B, ldb, C, ldc);
     else if(TA && !TB)
-        gemm_tn(M, N, K, ALPHA,A,lda, B, ldb,C,ldc);
+        gemm_tn(M, N, K, ALPHA, A, lda, B, ldb, C, ldc);
     else if(!TA && TB)
-        gemm_nt(M, N, K, ALPHA,A,lda, B, ldb,C,ldc);
+        gemm_nt(M, N, K, ALPHA, A, lda, B, ldb, C, ldc);
     else
-        gemm_tt(M, N, K, ALPHA,A,lda, B, ldb,C,ldc);
+        gemm_tt(M, N, K, ALPHA, A, lda, B, ldb, C, ldc);
 }
 
 #ifdef GPU
