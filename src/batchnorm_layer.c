@@ -132,6 +132,7 @@ void resize_batchnorm_layer(layer *layer, int w, int h)
     fprintf(stderr, "Not implemented\n");
 }
 
+
 /*
 ** 前向传播BN层
 */
@@ -146,10 +147,10 @@ void forward_batchnorm_layer(layer l, network net)
         mean_cpu(l.output, l.batch, l.out_c, l.out_h*l.out_w, l.mean);
         variance_cpu(l.output, l.mean, l.batch, l.out_c, l.out_h*l.out_w, l.variance);
 
-        scal_cpu(l.out_c, .99, l.rolling_mean, 1);
-        axpy_cpu(l.out_c, .01, l.mean, 1, l.rolling_mean, 1);
-        scal_cpu(l.out_c, .99, l.rolling_variance, 1);
-        axpy_cpu(l.out_c, .01, l.variance, 1, l.rolling_variance, 1);
+        scal_cpu(l.out_c, .99, l.rolling_mean, 1);                    // 将l.rolling_mean所有值赋0.99
+        axpy_cpu(l.out_c, .01, l.mean, 1, l.rolling_mean, 1);         // 将l.rolling_mean的值加上0.01*l.mean
+        scal_cpu(l.out_c, .99, l.rolling_variance, 1);                // 将l.rolling_variance所有值赋0.99
+        axpy_cpu(l.out_c, .01, l.variance, 1, l.rolling_variance, 1); // 将l.rolling_variance的值加上0.01*l.variance
 
         normalize_cpu(l.output, l.mean, l.variance, l.batch, l.out_c, l.out_h*l.out_w);   
         copy_cpu(l.outputs*l.batch, l.output, 1, l.x_norm, 1);

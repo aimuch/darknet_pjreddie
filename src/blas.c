@@ -191,7 +191,16 @@ void l2normalize_cpu(float *x, float *dx, int batch, int filters, int spatial)
     }
 }
 
-
+/*
+** x' = (x - μ)／σ
+** 输入:
+**      x: 图像指针
+**      mean: 样本均值
+**      variance: 样本方差
+**      batch: batch大小
+**      filters: 输出的图像通道数, 在这里同样可以理解为卷积核个数
+**      spatial: 输出图片的大小
+*/
 void normalize_cpu(float *x, float *mean, float *variance, int batch, int filters, int spatial)
 {
     int b, f, i;
@@ -199,7 +208,8 @@ void normalize_cpu(float *x, float *mean, float *variance, int batch, int filter
         for(f = 0; f < filters; ++f){
             for(i = 0; i < spatial; ++i){
                 int index = b*filters*spatial + f*spatial + i;
-                x[index] = (x[index] - mean[f])/(sqrt(variance[f]) + .000001f);
+
+                x[index] = (x[index] - mean[f])/(sqrt(variance[f]) + 0.000001f); // x' = (x - μ)／(σ + ε) , ε=.000001f 即: ε=1e-6
             }
         }
     }
@@ -208,31 +218,58 @@ void normalize_cpu(float *x, float *mean, float *variance, int batch, int filter
 void const_cpu(int N, float ALPHA, float *X, int INCX)
 {
     int i;
-    for(i = 0; i < N; ++i) X[i*INCX] = ALPHA;
+    for(i = 0; i < N; ++i){
+        X[i*INCX] = ALPHA;
+    }
 }
 
 void mul_cpu(int N, float *X, int INCX, float *Y, int INCY)
 {
     int i;
-    for(i = 0; i < N; ++i) Y[i*INCY] *= X[i*INCX];
+    for(i = 0; i < N; ++i){
+        Y[i*INCY] *= X[i*INCX];
+    }
 }
 
 void pow_cpu(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
 {
     int i;
-    for(i = 0; i < N; ++i) Y[i*INCY] = pow(X[i*INCX], ALPHA);
+    for(i = 0; i < N; ++i){
+        Y[i*INCY] = pow(X[i*INCX], ALPHA);
+    }
 }
 
+/*
+** axpy是线性代数中一种基本操作, 完成 y= alpha*x + y 操作, 其中x,y为矢量, alpha为实数系数
+** 可以参考: https://www.youtube.com/watch?v=PQ1Q85JGgZg
+** 输入:   N       X中包含的有效元素个数
+**        ALPHA   系数alpha
+**        X       参与运算的矢量X
+**        INCX    步长(倍数步长), 即X中凡是INCX的倍数编号参与运算
+**        Y       参与运算的矢量, 也相当于是输出
+*/
 void axpy_cpu(int N, float ALPHA, float *X, int INCX, float *Y, int INCY)
 {
     int i;
-    for(i = 0; i < N; ++i) Y[i*INCY] += ALPHA*X[i*INCX];
+    for(i = 0; i < N; ++i){
+        Y[i*INCY] += ALPHA*X[i*INCX];
+    }
 }
 
+
+/*
+**  缩放X数组所有元素的值
+**  输入:  N       X中包含的有效元素个数
+**        ALPHA   缩放比例
+**        X       待缩放的float数组指针
+**        INCX    步长(倍数步长), 即X中凡是INCX的倍数编号进行缩放操作
+*/
 void scal_cpu(int N, float ALPHA, float *X, int INCX)
 {
     int i;
-    for(i = 0; i < N; ++i) X[i*INCX] *= ALPHA;
+    for(i = 0; i < N; ++i){
+        X[i*INCX] *= ALPHA;
+    }
 }
 
 /*
@@ -245,7 +282,9 @@ void scal_cpu(int N, float ALPHA, float *X, int INCX)
 void fill_cpu(int N, float ALPHA, float *X, int INCX)
 {
     int i;
-    for(i = 0; i < N; ++i) X[i*INCX] = ALPHA;
+    for(i = 0; i < N; ++i){
+        X[i*INCX] = ALPHA;
+    }
 }
 
 void deinter_cpu(int NX, float *X, int NY, float *Y, int B, float *OUT)
@@ -278,10 +317,19 @@ void inter_cpu(int NX, float *X, int NY, float *Y, int B, float *OUT)
     }
 }
 
+/*
+**  将输入X中的数据复制到Y中(值复制, 并不是指针复制, 即之后X与Y之间再无关联)
+**  输入:  N       X中包含的有效元素个数
+**        X       待复制的float数组指针
+**        INCX    步长(倍数步长), 即X中凡是INCX的倍数编号进行拷贝赋值操作
+**        Y       待赋值的float数组指针
+*/
 void copy_cpu(int N, float *X, int INCX, float *Y, int INCY)
 {
     int i;
-    for(i = 0; i < N; ++i) Y[i*INCY] = X[i*INCX];
+    for(i = 0; i < N; ++i){
+        Y[i*INCY] = X[i*INCX];
+    }
 }
 
 void mult_add_into_cpu(int N, float *X, float *Y, float *Z)
@@ -436,19 +484,36 @@ void softmax_cpu(float *input, int n, int batch, int batch_offset, int groups, i
     }
 }
 
+
+/*
+** 上采样
+** 输入:
+**      *in: 输入图像指针
+**      w: 输入图像的宽度
+**      h: 输入图像的高度
+**      c: 输入图像的通道数
+**      batch: 一个batch中所含有的图片张数(等于net.batch)
+**      stride: 步长
+**      forward: 是否前向传播
+**      scale: 缩放比例
+**      *out: 输出图像指针
+*/
 void upsample_cpu(float *in, int w, int h, int c, int batch, int stride, int forward, float scale, float *out)
 {
     int i, j, k, b;
-    for(b = 0; b < batch; ++b){
-        for(k = 0; k < c; ++k){
-            for(j = 0; j < h*stride; ++j){
-                for(i = 0; i < w*stride; ++i){
+    for(b = 0; b < batch; ++b){ // 图片数量
+        for(k = 0; k < c; ++k){ // 图像通道数
+            for(j = 0; j < h*stride; ++j){ // 图像高度
+                for(i = 0; i < w*stride; ++i){ // 图像宽度
+                    // 输入图像索引   第几张图   第几通道      第几行       第几列      
                     int in_index  = b*w*h*c + k*w*h + (j/stride)*w + i/stride;
+
+                    // 输出图像索引          第几张图                 第几通道            第几行   第几列 
                     int out_index = b*w*h*c*stride*stride + k*w*h*stride*stride + j*w*stride + i;
-                    if(forward){
+                    if(forward){ // 前向传播
                         out[out_index] = scale*in[in_index];
                     }
-                    else {
+                    else { // 反向传播
                         in[in_index] += scale*out[out_index];
                     }
                 }
