@@ -158,8 +158,9 @@ void forward_batchnorm_layer(layer l, network net)
         normalize_cpu(l.output, l.rolling_mean, l.rolling_variance, l.batch, l.out_c, l.out_h*l.out_w);
     }
     
-    scale_bias(l.output, l.scales, l.batch, l.out_c, l.out_h*l.out_w);
-    add_bias(l.output, l.biases, l.batch, l.out_c, l.out_h*l.out_w);
+    // y = scale * x + b
+    scale_bias(l.output, l.scales, l.batch, l.out_c, l.out_h*l.out_w); // y_i = scale * x_i
+    add_bias(l.output, l.biases, l.batch, l.out_c, l.out_h*l.out_w);   // y_i += b
 }
 
 /*
@@ -167,19 +168,21 @@ void forward_batchnorm_layer(layer l, network net)
 */
 void backward_batchnorm_layer(layer l, network net)
 {
-    if(!net.train){ // 前向推导阶段
+    if(!net.train){ // 非训练阶段
         l.mean = l.rolling_mean;
         l.variance = l.rolling_variance;
     }
-    backward_bias(l.bias_updates, l.delta, l.batch, l.out_c, l.out_w*l.out_h);
-    backward_scale_cpu(l.x_norm, l.delta, l.batch, l.out_c, l.out_w*l.out_h, l.scale_updates);
+    backward_bias(l.bias_updates, l.delta, l.batch, l.out_c, l.out_w*l.out_h); // 更新偏置b
+    backward_scale_cpu(l.x_norm, l.delta, l.batch, l.out_c, l.out_w*l.out_h, l.scale_updates); // 更新缩放系数scale
 
     scale_bias(l.delta, l.scales, l.batch, l.out_c, l.out_h*l.out_w);
 
     mean_delta_cpu(l.delta, l.variance, l.batch, l.out_c, l.out_w*l.out_h, l.mean_delta);
     variance_delta_cpu(l.x, l.delta, l.mean, l.variance, l.batch, l.out_c, l.out_w*l.out_h, l.variance_delta);
     normalize_delta_cpu(l.x, l.mean, l.variance, l.mean_delta, l.variance_delta, l.batch, l.out_c, l.out_w*l.out_h, l.delta);
-    if(l.type == BATCHNORM) copy_cpu(l.outputs*l.batch, l.delta, 1, net.delta, 1);
+    if(l.type == BATCHNORM){
+        copy_cpu(l.outputs*l.batch, l.delta, 1, net.delta, 1);
+    }
 }
 
 #ifdef GPU

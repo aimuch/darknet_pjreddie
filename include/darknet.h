@@ -155,10 +155,10 @@ struct layer{
                             // 因此, 在region_layer.c的make_region_layer()函数中, 赋值为30*5
     int h,w,c;
     int out_h, out_w, out_c;
-    int n;
+    int n;          // 卷积核数量
     int max_boxes;
     int groups;
-    int size;
+    int size;       // 卷积核尺寸
     int side;
     int stride;
     int reverse;

@@ -245,7 +245,7 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.weight_updates = calloc(c/groups*n*size*size, sizeof(float)); // 开空间, 并用0初始化
 
     // bias就是Wx+b中的b(上面的weights就是W), 有多少个卷积核, 就有多少个b(与W的个数一一对应, 每个W的元素个数为c/groups*size*size)
-    l.biases = calloc(n, sizeof(float));
+    l.biases = calloc(n, sizeof(float));       // 开空间, 并用0初始化
     l.bias_updates = calloc(n, sizeof(float)); // 开空间, 并用0初始化
 
     // 该卷积层总的权重元素个数(权重元素个数=输入数据的通道数/分组卷积组数*卷积核个数*卷积核尺寸*卷积核尺寸, 注意因为每一个卷积核是同时作用于输入数据
@@ -289,6 +289,8 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.forward = forward_convolutional_layer;
     l.backward = backward_convolutional_layer;
     l.update = update_convolutional_layer;
+
+
     if(binary){
         l.binary_weights = calloc(l.nweights, sizeof(float));
         l.cweights = calloc(l.nweights, sizeof(char));
@@ -476,25 +478,44 @@ void resize_convolutional_layer(convolutional_layer *l, int w, int h)
     l->workspace_size = get_workspace_size(*l);
 }
 
+/*
+** 缩放即 y_i = alpha * x_i + b 中 y_i = y_i + b 计算
+** 输入:
+**      output: 输出数据指针
+**      biases: 偏置指针
+**      batch: batch数量
+**      n: 卷积核数量
+**      size: 卷积核尺寸
+*/
 void add_bias(float *output, float *biases, int batch, int n, int size)
 {
     int i,j,b;
     for(b = 0; b < batch; ++b){
         for(i = 0; i < n; ++i){
             for(j = 0; j < size; ++j){
-                output[(b*n + i)*size + j] += biases[i];
+                output[(b*n + i)*size + j] += biases[i]; // y_i += b
             }
         }
     }
 }
 
+/*
+** 缩放即 y_i = alpha * x_i + b 中 y_i = alpha * x_i 计算
+** 输入:
+**      output: 输出数据指针
+**      scales: 缩放系数指针
+**      batch: batch数量
+**      n: 卷积核数量
+**      size: 卷积核尺寸
+*/
 void scale_bias(float *output, float *scales, int batch, int n, int size)
 {
     int i,j,b;
     for(b = 0; b < batch; ++b){
         for(i = 0; i < n; ++i){
             for(j = 0; j < size; ++j){
-                output[(b*n + i)*size + j] *= scales[i];
+                // scales就是创建convolutional_layer时分配的l.scales, 然后赋值全是1
+                output[(b*n + i)*size + j] *= scales[i]; // y_i = alpha * x_i
             }
         }
     }
