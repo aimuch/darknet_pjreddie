@@ -69,6 +69,9 @@ layer make_batchnorm_layer(int batch, int w, int h, int c)
     return l;
 }
 
+/*
+** 求缩放值 gamma 梯度
+*/
 void backward_scale_cpu(float *x_norm, float *delta, int batch, int n, int size, float *scale_updates)
 {
     int i,b,f;

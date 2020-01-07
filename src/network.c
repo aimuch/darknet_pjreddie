@@ -143,7 +143,7 @@ char *get_layer_string(LAYER_TYPE a)
         case GRU:
             return "gru";
         case LSTM:
-	        return "lstm";
+            return "lstm";
         case CRNN:
             return "crnn";
         case MAXPOOL:
