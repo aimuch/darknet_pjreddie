@@ -70,7 +70,7 @@ layer make_batchnorm_layer(int batch, int w, int h, int c)
 }
 
 /*
-** 求缩放值 gamma 梯度
+** 求缩放值 gamma 梯度 δL/δα = ∑(δl/δy_i * x_i)
 */
 void backward_scale_cpu(float *x_norm, float *delta, int batch, int n, int size, float *scale_updates)
 {
@@ -175,8 +175,8 @@ void backward_batchnorm_layer(layer l, network net)
         l.mean = l.rolling_mean;
         l.variance = l.rolling_variance;
     }
-    backward_bias(l.bias_updates, l.delta, l.batch, l.out_c, l.out_w*l.out_h); // 更新偏置b
-    backward_scale_cpu(l.x_norm, l.delta, l.batch, l.out_c, l.out_w*l.out_h, l.scale_updates); // 更新缩放系数scale
+    backward_bias(l.bias_updates, l.delta, l.batch, l.out_c, l.out_w*l.out_h); // 计算偏置b梯度
+    backward_scale_cpu(l.x_norm, l.delta, l.batch, l.out_c, l.out_w*l.out_h, l.scale_updates); // 计算缩放系数scale的梯度
 
     scale_bias(l.delta, l.scales, l.batch, l.out_c, l.out_h*l.out_w);
 

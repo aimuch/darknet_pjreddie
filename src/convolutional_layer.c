@@ -544,6 +544,7 @@ void backward_bias(float *bias_updates, float *delta, int batch, int n, int size
     for(b = 0; b < batch; ++b){
         // 求和得一张输入图片的总偏置更新值
         for(i = 0; i < n; ++i){
+            // δL/δβ = ∑(δL/y_i)
             bias_updates[i] += sum_array(delta+size*(i+b*n), size);
         }
     }
