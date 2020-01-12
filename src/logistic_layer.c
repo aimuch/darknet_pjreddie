@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <assert.h>
 
+/*
+** 创建逻辑回归层
+*/
 layer make_logistic_layer(int batch, int inputs)
 {
     fprintf(stderr, "logistic x entropy                             %4d\n",  inputs);
@@ -17,34 +20,44 @@ layer make_logistic_layer(int batch, int inputs)
     l.batch = batch;
     l.inputs = inputs;
     l.outputs = inputs;
-    l.loss = calloc(inputs*batch, sizeof(float));
+    l.loss = calloc(inputs*batch, sizeof(float));   // 逻辑回归层所有元素损失(包含整个batch)
     l.output = calloc(inputs*batch, sizeof(float));
     l.delta = calloc(inputs*batch, sizeof(float));
-    l.cost = calloc(1, sizeof(float));
+    l.cost = calloc(1, sizeof(float));              // 逻辑回归层的损失总和
 
     l.forward = forward_logistic_layer;
     l.backward = backward_logistic_layer;
-    #ifdef GPU
+#ifdef GPU
     l.forward_gpu = forward_logistic_layer_gpu;
     l.backward_gpu = backward_logistic_layer_gpu;
 
     l.output_gpu = cuda_make_array(l.output, inputs*batch); 
     l.loss_gpu = cuda_make_array(l.loss, inputs*batch); 
     l.delta_gpu = cuda_make_array(l.delta, inputs*batch); 
-    #endif
+#endif
     return l;
 }
 
+/*
+ * 逻辑回归层前向传播函数
+ * @param l 当前逻辑回归层
+ * @param net 整个网络
+*/
 void forward_logistic_layer(const layer l, network net)
 {
     copy_cpu(l.outputs*l.batch, net.input, 1, l.output, 1);
     activate_array(l.output, l.outputs*l.batch, LOGISTIC);
     if(net.truth){
-        logistic_x_ent_cpu(l.batch*l.inputs, l.output, net.truth, l.delta, l.loss);
-        l.cost[0] = sum_array(l.loss, l.batch*l.inputs);
+        logistic_x_ent_cpu(l.batch*l.inputs, l.output, net.truth, l.delta, l.loss); // 逐元素做logistic计算
+        l.cost[0] = sum_array(l.loss, l.batch*l.inputs); // 计算当前逻辑回归层损失总和
     }
 }
 
+/*
+ * 逻辑回归层反向传播函数
+ * @param l 当前逻辑回归层
+ * @param net 整个网络
+*/
 void backward_logistic_layer(const layer l, network net)
 {
     axpy_cpu(l.inputs*l.batch, 1, l.delta, 1, net.delta, 1);

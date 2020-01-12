@@ -23,6 +23,10 @@ int local_out_width(local_layer l)
     return w/l.stride + 1;
 }
 
+/*
+**  创建局部连接层
+** local_layer 与conv_layer 工作方式相同, 除了权值不共享外,  也就是说, 在输入的每个不同部分应用不同的一组过滤器(local_layer仅用于yolo v1中)
+*/
 local_layer make_local_layer(int batch, int h, int w, int c, int n, int size, int stride, int pad, ACTIVATION activation)
 {
     int i;
@@ -47,6 +51,7 @@ local_layer make_local_layer(int batch, int h, int w, int c, int n, int size, in
     l.outputs = l.out_h * l.out_w * l.out_c;
     l.inputs = l.w * l.h * l.c;
 
+    // c*size*size*out_h*out_w 注意这里与卷积的区别, 多了out_h*out_w个参数, 因为参数不共享
     l.weights = calloc(c*n*size*size*locations, sizeof(float));
     l.weight_updates = calloc(c*n*size*size*locations, sizeof(float));
 
@@ -55,10 +60,12 @@ local_layer make_local_layer(int batch, int h, int w, int c, int n, int size, in
 
     // float scale = 1./sqrt(size*size*c);
     float scale = sqrt(2./(size*size*c));
-    for(i = 0; i < c*n*size*size; ++i) l.weights[i] = scale*rand_uniform(-1,1);
+    for(i = 0; i < c*n*size*size; ++i){
+        l.weights[i] = scale*rand_uniform(-1,1);
+    }
 
-    l.output = calloc(l.batch*out_h * out_w * n, sizeof(float));
-    l.delta  = calloc(l.batch*out_h * out_w * n, sizeof(float));
+    l.output = calloc(l.batch * out_h * out_w * n, sizeof(float));
+    l.delta  = calloc(l.batch * out_h * out_w * n, sizeof(float));
 
     l.workspace_size = out_h*out_w*size*size*c;
     

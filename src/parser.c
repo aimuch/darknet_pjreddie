@@ -178,6 +178,9 @@ typedef struct size_params{
     network *net;
 } size_params;
 
+/*
+** 解析局部连接层
+*/
 local_layer parse_local(list *options, size_params params)
 {
     int n = option_find_int(options, "filters",1);
@@ -194,19 +197,19 @@ local_layer parse_local(list *options, size_params params)
     batch=params.batch;
     if(!(h && w && c)) error("Layer before local layer must output image.");
 
-    local_layer layer = make_local_layer(batch,h,w,c,n,size,stride,pad,activation);
+    local_layer layer = make_local_layer(batch,h,w,c,n,size,stride,pad,activation); // 创建局部连接层
 
     return layer;
 }
 
 layer parse_deconvolutional(list *options, size_params params)
 {
-    int n = option_find_int(options, "filters",1);
-    int size = option_find_int(options, "size",1);
-    int stride = option_find_int(options, "stride",1);
+    int n = option_find_int(options, "filters", 1);      // 获取卷积核个数, 若配置文件中没有指定, 则设为1
+    int size = option_find_int(options, "size", 1);      // 获取卷积核尺寸, 若配置文件中没有指定, 则设为1
+    int stride = option_find_int(options, "stride", 1);  // 获取步长, 若配置文件中没有指定, 则设为1
 
-    char *activation_s = option_find_str(options, "activation", "logistic");
-    ACTIVATION activation = get_activation(activation_s);
+    char *activation_s = option_find_str(options, "activation", "logistic");    // 获取该层使用的激活函数类型, 若配置文件中没有指定, 则使用logistic激活函数
+    ACTIVATION activation = get_activation(activation_s);                       // 获取激活函数的枚举索引
 
     int batch,h,w,c;
     h = params.h;
@@ -215,8 +218,8 @@ layer parse_deconvolutional(list *options, size_params params)
     batch=params.batch;
     if(!(h && w && c)) error("Layer before deconvolutional layer must output image.");
     int batch_normalize = option_find_int_quiet(options, "batch_normalize", 0);
-    int pad = option_find_int_quiet(options, "pad",0);
-    int padding = option_find_int_quiet(options, "padding",0);
+    int pad = option_find_int_quiet(options, "pad", 0);
+    int padding = option_find_int_quiet(options, "padding", 0);
     if(pad) padding = size/2;
 
     layer l = make_deconvolutional_layer(batch,h,w,c,n,size,stride,padding, activation, batch_normalize, params.net->adam);
@@ -286,7 +289,7 @@ layer parse_crnn(list *options, size_params params)
 
 layer parse_rnn(list *options, size_params params)
 {
-    int output = option_find_int(options, "output",1);
+    int output = option_find_int(options, "output", 1);
     char *activation_s = option_find_str(options, "activation", "logistic");
     ACTIVATION activation = get_activation(activation_s);
     int batch_normalize = option_find_int_quiet(options, "batch_normalize", 0);
@@ -628,7 +631,9 @@ layer parse_l2norm(list *options, size_params params)
     return l;
 }
 
-
+/*
+** 解析逻辑回归层
+*/
 layer parse_logistic(list *options, size_params params)
 {
     layer l = make_logistic_layer(params.batch, params.inputs);
@@ -638,6 +643,9 @@ layer parse_logistic(list *options, size_params params)
     return l;
 }
 
+/*
+** 解析激活层
+*/
 layer parse_activation(list *options, size_params params)
 {
     char *activation_s = option_find_str(options, "activation", "linear");
@@ -877,19 +885,19 @@ network *parse_network_cfg(char *filename)
         // 获取网络层的类型
         LAYER_TYPE lt = string_to_layer_type(s->type);
         if(lt == CONVOLUTIONAL){
-            l = parse_convolutional(options, params);
+            l = parse_convolutional(options, params);       // 解析卷积层参数
         }else if(lt == DECONVOLUTIONAL){
-            l = parse_deconvolutional(options, params);
+            l = parse_deconvolutional(options, params);     // 解析反卷积层参数
         }else if(lt == LOCAL){
-            l = parse_local(options, params);
+            l = parse_local(options, params);               // 解析局部连接层, 与卷积层的区别是参数不共享, 卷积层参数为c*n*size*size,而局部连接层参数为c*n*size*size*out_h*out_w
         }else if(lt == ACTIVE){
-            l = parse_activation(options, params);
+            l = parse_activation(options, params);          // 解析激活层参数
         }else if(lt == LOGXENT){
-            l = parse_logistic(options, params);
+            l = parse_logistic(options, params);            // 解析逻辑回归层参数
         }else if(lt == L2NORM){
-            l = parse_l2norm(options, params);
+            l = parse_l2norm(options, params);              // 解析l2标准化层参数
         }else if(lt == RNN){
-            l = parse_rnn(options, params);
+            l = parse_rnn(options, params);                 // 解析rnn层参数
         }else if(lt == GRU){
             l = parse_gru(options, params);
         }else if (lt == LSTM) {

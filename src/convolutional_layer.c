@@ -290,17 +290,20 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
     l.backward = backward_convolutional_layer;
     l.update = update_convolutional_layer;
 
-
+    // 权重二值化
     if(binary){
         l.binary_weights = calloc(l.nweights, sizeof(float));
         l.cweights = calloc(l.nweights, sizeof(char));
         l.scales = calloc(n, sizeof(float));
     }
+
+    // 权重和输入都二值化
     if(xnor){
         l.binary_weights = calloc(l.nweights, sizeof(float));
         l.binary_input = calloc(l.inputs*l.batch, sizeof(float));
     }
 
+    // 规范化
     if(batch_normalize){
         l.scales = calloc(n, sizeof(float));
         l.scale_updates = calloc(n, sizeof(float));
@@ -319,6 +322,8 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
         l.x = calloc(l.batch*l.outputs, sizeof(float));
         l.x_norm = calloc(l.batch*l.outputs, sizeof(float));
     }
+
+
     if(adam){
         l.m = calloc(l.nweights, sizeof(float));
         l.v = calloc(l.nweights, sizeof(float));
@@ -386,9 +391,10 @@ convolutional_layer make_convolutional_layer(int batch, int h, int w, int c, int
         cudnnCreateFilterDescriptor(&l.dweightDesc);
         cudnnCreateConvolutionDescriptor(&l.convDesc);
         cudnn_convolutional_setup(&l);
-#endif
+#endif // CUDNN
     }
-#endif
+#endif // GPU
+
     l.workspace_size = get_workspace_size(l);
     l.activation = activation;
 
@@ -714,6 +720,9 @@ void backward_convolutional_layer(convolutional_layer l, network net)
     }
 }
 
+/*
+** 卷积层网络参数更新
+*/
 void update_convolutional_layer(convolutional_layer l, update_args a)
 {
     float learning_rate = a.learning_rate*l.learning_rate_scale;
@@ -721,14 +730,17 @@ void update_convolutional_layer(convolutional_layer l, update_args a)
     float decay = a.decay;
     int batch = a.batch;
 
+    // 更新bias
     axpy_cpu(l.n, learning_rate/batch, l.bias_updates, 1, l.biases, 1);
     scal_cpu(l.n, momentum, l.bias_updates, 1);
 
+    // 更新scale
     if(l.scales){
         axpy_cpu(l.n, learning_rate/batch, l.scale_updates, 1, l.scales, 1);
         scal_cpu(l.n, momentum, l.scale_updates, 1);
     }
 
+    // 更新weight
     axpy_cpu(l.nweights, -decay*batch, l.weights, 1, l.weight_updates, 1);
     axpy_cpu(l.nweights, learning_rate/batch, l.weight_updates, 1, l.weights, 1);
     scal_cpu(l.nweights, momentum, l.weight_updates, 1);

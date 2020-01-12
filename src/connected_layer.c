@@ -11,6 +11,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+** 构建全连接层
+** 输入:  batch             该层输入中一个batch所含有的图片张数, 等于net.batch
+**       inputs            全连接层每张输入图片的元素个数
+**       outputs           全连接层输出元素个数(由网络配置文件指定, 如果未指定, 默认值为1, 在parse_connected()中赋值）
+**       activation        激活函数类型
+**       batch_normalize   是否进行BN
+** 返回:  全连接层l
+*/
 layer make_connected_layer(int batch, int inputs, int outputs, ACTIVATION activation, int batch_normalize, int adam)
 {
     int i;
@@ -18,36 +27,45 @@ layer make_connected_layer(int batch, int inputs, int outputs, ACTIVATION activa
     l.learning_rate_scale = 1;
     l.type = CONNECTED;
 
-    l.inputs = inputs;
-    l.outputs = outputs;
-    l.batch=batch;
-    l.batch_normalize = batch_normalize;
-    l.h = 1;
+    l.inputs = inputs;                      // 全连接层一张输入图片的元素个数
+    l.outputs = outputs;                    // 全连接层对应一张输入图片的输出元素个数
+    l.batch=batch;                          // 一个batch中的图片张数
+    l.batch_normalize = batch_normalize;    // 是否进行BN
+    l.h = 1;                                // 全连接层输入图片高为1, 宽也为1
     l.w = 1;
-    l.c = inputs;
-    l.out_h = 1;
+    l.c = inputs;                           // 全连接层的输入通道数等于单张输入图片的元素个数
+    l.out_h = 1;                            // 全连接层的输出图高为1, 宽也为1
     l.out_w = 1;
-    l.out_c = outputs;
+    l.out_c = outputs;                      // 全连接层输出图片的通道数等于一张输入图片对应的输出元素个数
 
-    l.output = calloc(batch*outputs, sizeof(float));
-    l.delta = calloc(batch*outputs, sizeof(float));
+    l.output = calloc(batch*outputs, sizeof(float));    // 全连接层所有输出(包含整个batch的)
+    l.delta = calloc(batch*outputs, sizeof(float));     // 全连接层的敏感度图(包含整个batch的)
 
-    l.weight_updates = calloc(inputs*outputs, sizeof(float));
-    l.bias_updates = calloc(outputs, sizeof(float));
+    // 由下面forward_connected_layer()函数中调用的gemm()可以看出, l.weight_updates应该理解为outputs行, inputs列
+    l.weight_updates = calloc(inputs*outputs, sizeof(float));   // 全连接层权重系数更新值个数等于一张输入图片元素个数与其对应输出元素个数之积
+    l.bias_updates = calloc(outputs, sizeof(float));            // 全连接层偏置更新值个数就等于一张输入图片的输出元素个数
 
-    l.weights = calloc(outputs*inputs, sizeof(float));
-    l.biases = calloc(outputs, sizeof(float));
+    // 由下面forward_connected_layer()函数中调用的gemm()可以看出, l.weight应该理解为outputs行, inputs列
+    l.weights = calloc(outputs*inputs, sizeof(float));          // 全连接层权重系数个数等于一张输入图片元素个数与其对应输出元素个数之积
+    l.biases = calloc(outputs, sizeof(float));                  // 全连接层偏置个数就等于一张输入图片的输出元素个数
 
+    // 全连接层前向、反向、更新函数
     l.forward = forward_connected_layer;
     l.backward = backward_connected_layer;
     l.update = update_connected_layer;
 
+    // 初始化权重: 缩放因子*-1到1之间的均匀分布, 缩放因子等于sqrt(2./inputs), 为什么取这个值呢？？暂时没有想清楚, 
+    // 注意, 与卷积层make_convolutional_layer()中初始化值不同, 这里是均匀分布, 而卷积层中是正态分布。
+    // TODO: 个人感觉, 这里应该加一个if条件语句: if(weightfile), 因为如果导入了预训练权重文件, 就没有必要这样初始化了(事实上在detector.c的train_detector()函数中, 
+    // 紧接着parse_network_cfg()函数之后, 就添加了if(weightfile)语句判断是否导入权重系数文件, 如果导入了权重系数文件, 也许这里初始化的值也会覆盖掉, 
+    // 总之这里的权重初始化的处理方式还是值得思考的, 也许更好的方式是应该设置专门的函数进行权重的初始化, 同时偏置也是)
     //float scale = 1./sqrt(inputs);
     float scale = sqrt(2./inputs);
     for(i = 0; i < outputs*inputs; ++i){
         l.weights[i] = scale*rand_uniform(-1, 1);
     }
 
+    // 初始化所有偏置值为0
     for(i = 0; i < outputs; ++i){
         l.biases[i] = 0;
     }

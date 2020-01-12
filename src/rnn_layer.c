@@ -26,6 +26,19 @@ static void increment_layer(layer *l, int steps)
 #endif
 }
 
+/*
+** 构建RNN层, RNN层本质上是三个全连接层构成的
+** darknet中的RNN是vanilla RNN, 具体结构可以参考 https://pjreddie.com/darknet/rnns-in-darknet/
+**
+** 输入：  batch               输入中字符的个数, 这个不是最终的batch值, 因为RNN需要设置step值, 即batch=batch/step
+          inputs              RNN层每个输入字符的元素个数
+          outputs             RNN层输出元素个数
+          steps               RNN网络的步长
+          activation          激活方式
+          batch_normalize     是否需要BN操作
+          adam                
+** 返回：  RNN层l
+ */
 layer make_rnn_layer(int batch, int inputs, int outputs, int steps, ACTIVATION activation, int batch_normalize, int adam)
 {
     fprintf(stderr, "RNN Layer: %d inputs, %d outputs\n", inputs, outputs);
@@ -39,6 +52,13 @@ layer make_rnn_layer(int batch, int inputs, int outputs, int steps, ACTIVATION a
     l.state = calloc(batch*outputs, sizeof(float));
     l.prev_state = calloc(batch*outputs, sizeof(float));
 
+    /*
+    ** vanilla RNN由三个隐含层组成
+    ** input_layer        隐含层中的第一层, 与输入层相连
+    ** self_layer         隐含层中的第二层
+    ** output_layer       隐含层中的第三层, 与输出层相连
+    ** 这三个隐含层每一层都是一个全连接层, 直接调用make_connected_layer创建
+    */
     l.input_layer = malloc(sizeof(layer));
     fprintf(stderr, "\t\t");
     *(l.input_layer) = make_connected_layer(batch*steps, inputs, outputs, activation, batch_normalize, adam);

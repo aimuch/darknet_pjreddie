@@ -174,18 +174,18 @@ void variance_cpu(float *x, float *mean, int batch, int filters, int spatial, fl
 void l2normalize_cpu(float *x, float *dx, int batch, int filters, int spatial)
 {
     int b,f,i;
-    for(b = 0; b < batch; ++b){
-        for(i = 0; i < spatial; ++i){
+    for(b = 0; b < batch; ++b){ // 遍历每一张图片
+        for(i = 0; i < spatial; ++i){ // 遍历每一个通道上的所有元素
             float sum = 0;
-            for(f = 0; f < filters; ++f){
+            for(f = 0; f < filters; ++f){ // 遍历所有通道
                 int index = b*filters*spatial + f*spatial + i;
-                sum += powf(x[index], 2);
+                sum += powf(x[index], 2); // 计算每个batch中,每个像素点所有通道上平方和
             }
-            sum = sqrtf(sum);
+            sum = sqrtf(sum); // 计算二范数
             for(f = 0; f < filters; ++f){
                 int index = b*filters*spatial + f*spatial + i;
-                x[index] /= sum;
-                dx[index] = (1 - x[index]) / sum;
+                x[index] /= sum; // 对每个元素进行l2标准化
+                dx[index] = (1 - x[index]) / sum; // 计算反传梯度
             }
         }
     }
@@ -376,14 +376,16 @@ void softmax_x_ent_cpu(int n, float *pred, float *truth, float *delta, float *er
     }
 }
 
+
+// 逐元素做logistic计算
 void logistic_x_ent_cpu(int n, float *pred, float *truth, float *delta, float *error)
 {
     int i;
     for(i = 0; i < n; ++i){
         float t = truth[i];
         float p = pred[i];
-        error[i] = -t*log(p) - (1-t)*log(1-p);
-        delta[i] = t-p;
+        error[i] = -t*log(p) - (1-t)*log(1-p);  // 损失计算
+        delta[i] = t-p; // 每一项的误差项
     }
 }
 

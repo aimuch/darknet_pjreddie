@@ -9,6 +9,12 @@
 #include <stdio.h>
 #include <assert.h>
 
+/*
+ * 构造l2标准化层
+ * @param batch
+ * @param inputs
+ * @return
+*/
 layer make_l2norm_layer(int batch, int inputs)
 {
     fprintf(stderr, "l2norm                                         %4d\n",  inputs);
