@@ -55,10 +55,6 @@ layer make_connected_layer(int batch, int inputs, int outputs, ACTIVATION activa
     l.update = update_connected_layer;
 
     // 初始化权重: 缩放因子*-1到1之间的均匀分布, 缩放因子等于sqrt(2./inputs), 为什么取这个值呢？？暂时没有想清楚, 
-    // 注意, 与卷积层make_convolutional_layer()中初始化值不同, 这里是均匀分布, 而卷积层中是正态分布。
-    // TODO: 个人感觉, 这里应该加一个if条件语句: if(weightfile), 因为如果导入了预训练权重文件, 就没有必要这样初始化了(事实上在detector.c的train_detector()函数中, 
-    // 紧接着parse_network_cfg()函数之后, 就添加了if(weightfile)语句判断是否导入权重系数文件, 如果导入了权重系数文件, 也许这里初始化的值也会覆盖掉, 
-    // 总之这里的权重初始化的处理方式还是值得思考的, 也许更好的方式是应该设置专门的函数进行权重的初始化, 同时偏置也是)
     //float scale = 1./sqrt(inputs);
     float scale = sqrt(2./inputs);
     for(i = 0; i < outputs*inputs; ++i){
@@ -142,7 +138,8 @@ layer make_connected_layer(int batch, int inputs, int outputs, ACTIVATION activa
 #endif
     }
 #endif
-    l.activation = activation;
+
+    l.activation = activation; // 激活函数
     fprintf(stderr, "connected                            %4d  ->  %4d\n", inputs, outputs);
     return l;
 }
@@ -166,6 +163,14 @@ void update_connected_layer(layer l, update_args a)
     scal_cpu(l.inputs*l.outputs, momentum, l.weight_updates, 1);
 }
 
+/*
+** 全连接层前向传播函数
+** 输入: l     当前全连接层
+**       net   整个网络
+** 流程: 全连接层的前向传播相对简单, 首先初始化输出l.output全为0,在进行相关参数赋值之后, 直接调用gemm_nt()完成Wx操作, 
+**       而后根据判断是否需要BN, 如果需要, 则进行BN操作, 完了之后为每一个输出元素添加偏置得到Wx+b, 最后使用激活函数处理
+**       每一个输出元素, 得到f(Wx+b)
+*/
 void forward_connected_layer(layer l, network net)
 {
     fill_cpu(l.outputs*l.batch, 0, l.output, 1);
